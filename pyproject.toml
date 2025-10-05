@@ -1,0 +1,30 @@
+[project]
+name = "classifier"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.118.0",
+    "langgraph>=1.0.0a4",
+    "uvicorn>=0.37.0",
+]
+[dependency-groups]
+dev = [
+    "commitizen>=4.9.1",
+    "isort>=6.1.0",
+    "pre-commit>=4.3.0",
+    "pyrefly>=0.35.0",
+    "pytest>=8.4.2",
+    "ruff>=0.13.3",
+    "ssort>=0.15.0",
+    "typer>=0.19.2",
+    "vulture>=2.14",
+]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "pep440"
+version_provider = "uv"
+update_changelog_on_bump = true
+major_version_zero = true
