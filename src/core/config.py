@@ -20,10 +20,12 @@ class Settings(BaseSettings):
 
     postgres_url: SecretStr
 
+    openai_api_key: SecretStr
+    tavily_api_key: SecretStr
+
     @property
     def pg_vector_url(self) -> SecretStr:
-        """
-        Returns the PostgreSQL database URL for PGVector.
+        """Returns the PostgreSQL database URL for PGVector.
         Converts 'postgres://' to 'postgresql://' if needed.
         """
         url = self.postgres_url.get_secret_value()

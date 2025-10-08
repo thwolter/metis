@@ -1,36 +1,82 @@
 [project]
-name = "classifier"
-version = "0.1.0"
-description = "Add your description here"
-requires-python = ">=3.12"
+name = "agent"
+version = "0.0.1"
+description = "Starter template for making a new agent LangGraph."
+authors = [
+    { name = "William Fu-Hinthorn", email = "13333726+hinthornw@users.noreply.github.com" },
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
 dependencies = [
-    "fastapi>=0.118.0",
-    "langchain-openai>=0.3.34",
+    "fastapi>=0.118.1",
+    "langchain>=0.3.27",
+    "langchain-core>=0.3.78",
+    "langchain-openai>=0.3.35",
     "langchain-postgres>=0.0.15",
-    "langgraph>=1.0.0a4",
+    "langchain-tavily>=0.2.11",
+    "langgraph>=0.2.6",
     "notebook>=7.4.7",
     "psycopg2>=2.9.10",
     "pydantic-settings>=2.11.0",
-    "uvicorn>=0.37.0",
+    "python-dotenv>=1.0.1",
 ]
+
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["langgraph.templates.agent", "agent", "core"]
+[tool.setuptools.package-dir]
+"langgraph.templates.agent" = "src/agent"
+"agent" = "src/agent"
+"core" = "src/core"
+
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.ruff]
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "D401", # First line should be in imperative mood
+    "T201",
+    "UP",
+]
+lint.ignore = [
+    "UP006",
+    "UP007",
+    # We actually do want to import from typing_extensions
+    "UP035",
+    # Relax the convention by _not_ requiring documentation for every function parameter.
+    "D417",
+    "E501",
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "UP"]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [dependency-groups]
 dev = [
-    "commitizen>=4.9.1",
+    "anyio>=4.7.0",
     "isort>=6.1.0",
+    "langgraph-cli[inmem]>=0.2.8",
+    "mypy>=1.13.0",
     "pre-commit>=4.3.0",
-    "pyrefly>=0.35.0",
-    "pytest>=8.4.2",
-    "python-dotenv>=1.1.1",
-    "ruff>=0.13.3",
+    "pyrefly>=0.36.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.2.0",
+    "ruff>=0.8.2",
     "ssort>=0.15.0",
     "typer>=0.19.2",
     "vulture>=2.14",
 ]
-
-[tool.commitizen]
-name = "cz_conventional_commits"
-tag_format = "$version"
-version_scheme = "pep440"
-version_provider = "uv"
-update_changelog_on_bump = true
-major_version_zero = true
