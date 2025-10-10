@@ -18,7 +18,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 project_root = Path(__file__).resolve().parent.parent
-migration_env_path = project_root / '.env.migration'
+migration_env_path = project_root / '.env'
 env_values = dotenv_values(migration_env_path) if migration_env_path.exists() else {}
 
 alembic_url = env_values.get('ALEMBIC_DATABASE_URL') or os.getenv('ALEMBIC_DATABASE_URL')

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -9,7 +8,7 @@ import dramatiq
 from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
 from core.db import session_scope
-from core.queue import setup_broker
+
 from metadata.models import Job, JobStatus
 from metadata.service import (
     merge_metadata,
@@ -17,11 +16,9 @@ from metadata.service import (
     record_metadata_version,
     update_vecstore_metadata,
 )
+from core.queueing import broker
+from loguru import logger
 
-logger = logging.getLogger(__name__)
-
-# Ensure Dramatiq broker is configured on import (used by CLI worker)
-setup_broker()
 
 
 def _load_job(job_id: UUID) -> tuple[Job, ContextSchema, MetadataSchema | None, list[str]]:
