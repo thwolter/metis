@@ -38,7 +38,7 @@ builder.add_conditional_edges(
     path=tools_condition,
     path_map={
         'tools': 'tools_for_metadata',
-        '__end__': 'metadata_cleaner',
+        '__end__': 'finalize_metadata',
     },
 )
 builder.add_edge('tools_for_metadata', 'metadata_extractor')

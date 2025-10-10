@@ -19,10 +19,10 @@ structured_metadata_model = _base_model.with_structured_output(MetadataSchema)
 _EMPTY_METADATA = MetadataSchema()
 
 
-def _metadata_fields(remove_document_type: bool = True) -> str:
+def _metadata_fields(remove: list | None) -> str:
     fields = list(MetadataSchema.model_fields.keys())
-    if remove_document_type:
-        fields.remove('document_type')
+    if remove:
+        fields = list(filter(lambda x: x not in remove, fields))
     return ', '.join(fields)
 
 
@@ -54,12 +54,12 @@ def metadata_extractor(state: State) -> Dict[str, Any]:
     history = _history(state)
     extraction_prompt = SystemMessage(
         content=(
-            'You are an expert metadata extractor. Retrieve relevant documents '
-            'chunks and extracts the following metadata fields: '
-            + _metadata_fields()
-            + '. Ensure that the correct company name is identified, e.g. when a company was renamed.'
-            ' When you are uncertain about a field, use the search tool to increase confidence. '
-            ' Retrieve up to two times further chunks when you are uncertain about a field.'
+            'You are an expert metadata extractor. Retrieve the most relevant document chunks and extract the following metadata fields: '
+            + _metadata_fields(remove=['document_type'])
+            + '. Ensure correct identification of the company name, even if it was renamed. '
+            'When uncertain about a field, use the search tool to validate or improve accuracy. '
+            'If uncertainty remains, retrieve up to two additional rounds of chunks to refine extraction. '
+            'Create concise, meaningful tags.'
         )
     )
 
@@ -74,6 +74,10 @@ def metadata_extractor(state: State) -> Dict[str, Any]:
         content=(
             'Using the conversation so far, respond with JSON matching the metadata schema precisely. '
             'Use null for missing fields and do not include any explanatory text.'
+            'Create concise, meaningful tags. using the fewest possible words in lowercase. '
+            'Avoid generic or redundant tags and exclude the aforementioned fields from tagging: '
+            + _metadata_fields(remove=['tags'])
+            + '.'
         )
     )
 
