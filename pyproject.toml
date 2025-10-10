@@ -1,6 +1,6 @@
 [project]
 name = "classifier"
-version = "0.0.1"
+version = "0.0.2"
 description = "Classify documents and extract metadata using embedded document chunks."
 authors = [
     { name = "Thomas Wolter", email = "thwolter@gmail.com" },
