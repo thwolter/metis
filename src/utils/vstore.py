@@ -4,9 +4,8 @@ import psycopg2
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 
-from src.core.config import get_settings
-from src.core.tenancy import dsn_with_tenant
-
+from core.config import get_settings
+from core.tenancy import dsn_with_tenant
 
 settings = get_settings()
 
@@ -29,7 +28,7 @@ def get_collection_uuid(conn, collection_name: str) -> str:
         )
         row = cur.fetchone()
         if not row:
-            raise ValueError(f"Collection not found: {collection_name}")
+            raise ValueError(f'Collection not found: {collection_name}')
         return row[0]
 
 
@@ -41,7 +40,5 @@ def get_vectorstore(*, collection_name: str, tenant_id: UUID) -> PGVector:
     """
     dsn = settings.pg_vector_url.get_secret_value()
     tenant_dsn = dsn_with_tenant(dsn, tenant_id)
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    return PGVector(
-        embeddings=embeddings, collection_name=collection_name, connection=tenant_dsn
-    )
+    embeddings = OpenAIEmbeddings(model='text-embedding-3-small')
+    return PGVector(embeddings=embeddings, collection_name=collection_name, connection=tenant_dsn)
