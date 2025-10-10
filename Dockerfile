@@ -50,7 +50,7 @@ EXPOSE 8000
 # Environment defaults (can be overridden at runtime)
 ENV PYTHONPATH=/app/src \
     HOST=0.0.0.0 \
-    PORT=8000
+    PORT=8000 \
 
 # The entrypoint runs migrations, then starts Dramatiq and Uvicorn
 ENTRYPOINT ["./scripts/docker-entrypoint.sh"]

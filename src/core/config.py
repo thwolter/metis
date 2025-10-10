@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     admin_email: str = 'support@riskary.de'
 
     postgres_url: SecretStr
+    redis_url: SecretStr
 
     openai_api_key: SecretStr
     tavily_api_key: SecretStr
@@ -36,4 +37,4 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()  # pyrefly: ignore[missing-argument]
+    return Settings()  # type: ignore[missing-argument]

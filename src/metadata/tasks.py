@@ -9,6 +9,7 @@ import dramatiq
 from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
 from core.db import session_scope
+from core.queue import setup_broker
 from metadata.models import Job, JobStatus
 from metadata.service import (
     merge_metadata,
@@ -18,6 +19,9 @@ from metadata.service import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Ensure Dramatiq broker is configured on import (used by CLI worker)
+setup_broker()
 
 
 def _load_job(job_id: UUID) -> tuple[Job, ContextSchema, MetadataSchema | None, list[str]]:
