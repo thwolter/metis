@@ -1,13 +1,29 @@
 from fastapi import FastAPI
 
-app = FastAPI()
+from core.config import get_settings
+from metadata.api import router as metadata_router
 
 
-@app.get('/')
-async def root():
-    return {'message': 'Hello World'}
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    application = FastAPI(
+        title=settings.app_name,
+        version=settings.version,
+        docs_url='/docs',
+        redoc_url='/redoc',
+    )
+
+    @application.get('/healthz')
+    async def healthz():  # pragma: no cover - trivial endpoint
+        return {'status': 'ok'}
+
+    @application.get('/readyz')
+    async def readyz():  # pragma: no cover - trivial endpoint
+        return {'status': 'ready'}
+
+    application.include_router(metadata_router)
+    return application
 
 
-@app.get('/hello/{name}')
-async def say_hello(name: str):
-    return {'message': f'Hello {name}'}
+app = create_app()
