@@ -8,5 +8,6 @@ __all__ = [
 def __getattr__(name):
     if name in __all__:
         from . import vstore
+
         return getattr(vstore, name)
     raise AttributeError(name)
