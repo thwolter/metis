@@ -1,36 +1,32 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/main.py` provides the FastAPI entry point and wires the app, queues, and settings together.
-- `src/core/` hosts shared infrastructure (config loading, database session management, Dramatiq broker utilities, tenancy helpers).
-- `src/metadata/` contains the primary domain logic: Pydantic schemas, SQLModel models, service layer, async tasks, and API routes.
-- `src/agent/` captures LangGraph agent logic (graph orchestration, nodes, tools, and state handling).
-- `src/utils/` stores cross-cutting helpers; keep these focused and dependency-light.
-- `alembic/` tracks migrations; `tests/` is split into `unit_tests/` and `integration_tests/` to encourage layering.
+- `src/` holds application code split into domains such as `agent/`, `metadata/`, and `core/`. Each package exposes Pydantic schemas, SQLModel models, and service utilities.
+- `alembic/` contains database migrations (`versions/`) and Alembic configuration. The migrations target the `metadata` schema; keep new revisions scoped accordingly.
+- `tests/` is organized by level (`unit_tests/`, `integration_tests/`) and mirrors the `src/` layout for ease of discovery.
+- `notebooks/` and `agent.egg-info/` are ancillary; avoid coupling production logic to them.
 
 ## Build, Test, and Development Commands
-- `uv sync` installs runtime and `dev` dependencies from `pyproject.toml`/`uv.lock`.
-- `uv run uvicorn main:app --reload` runs the API locally with auto-reload (ensure Redis/Postgres services are reachable).
-- `uv run alembic upgrade head` applies migrations; run this before starting workers or the API.
-- `uv run dramatiq metadata.tasks:broker -p 1 -t 8` starts the Dramatiq worker matching the Docker entrypoint defaults.
-- `uv run pytest` executes the full test suite; add `tests/unit_tests` or `tests/integration_tests` to scope runs.
-- Optional: `docker build -t classifier .` produces the production image used by CI/CD or deployment scripts.
+- `uv run task lint` (if defined) or `./.venv/bin/ruff check src tests` validates lint rules.
+- `./.venv/bin/python -m pytest -q` runs the full test suite. Export `OPENAI_API_KEY` and `TAVILY_API_KEY` with dummy values when offline.
+- `alembic upgrade head` applies migrations using the DSN in `.env.migration` (`ALEMBIC_DATABASE_URL`). Run from the repository root.
+- `./.venv/bin/python main.py` launches the FastAPI entrypoint for manual smoke checks.
 
 ## Coding Style & Naming Conventions
-- Follow PEP 8 with 4-space indentation and type hints on public functions.
-- Domain modules (`metadata`, `agent`) use snake_case filenames and PascalCase Pydantic/SQLModel classes; keep request/response schemas in `schemas.py`.
-- Format with `uv run ruff format` and lint with `uv run ruff check`; fix import ordering via `uv run isort .` and symbol sorting via `uv run ssort src`.
-- Prefer stdlib `logging` with the OpenTelemetry handler configured in `core/logging.py`, and limit cross-module side effects to keep agent graph execution predictable.
+- Python code uses 4-space indentation and follows Ruff’s defaults (`pyproject.toml` sets line length 120, single quotes).
+- SQLModel classes should keep enum-backed states (`JobStatus`) and serialize JSON fields via `model_dump(mode='json')`.
+- Module names remain lowercase with underscores (`metadata/service.py`), while Pydantic models and SQLModels use `PascalCase`.
 
 ## Testing Guidelines
-- Unit tests live in `tests/unit_tests/test_*.py`; integration flows reside in `tests/integration_tests/`.
-- Structure tests around public APIs (services, FastAPI routes, Dramatiq tasks) and isolate external calls with fakes or fixtures (see `tests/conftest.py`).
-- Use `pytest.mark.asyncio` for coroutine tests and ensure new async helpers include awaited assertions.
-- When adding features, include both unit coverage for edge cases and at least one integration path validating orchestrated workflows.
+- Prefer `tests/unit_tests/` for pure logic and `tests/integration_tests/` when invoking agents or database layers.
+- Name tests descriptively (`test_<behavior>_<expectation>`), mirroring the target module.
+- Use the in-memory SQLite fixtures provided in `tests/test_metadata_service.py`; avoid hard-coded Postgres dependencies in unit tests.
 
 ## Commit & Pull Request Guidelines
-- The repo is configured for Conventional Commits (`[tool.commitizen]`); prefer `uv run cz commit` to keep messages consistent (`feat:`, `fix:`, `refactor:`).
-- Keep subject lines imperative and under 72 characters; add concise body bullets if context is required.
-- Before opening a PR, run linting, formatting, migrations (if relevant), and the full test suite; attach command output in the PR description.
-- Reference related issues, call out schema or migration impacts, and provide API payload examples or screenshots when behavior changes.
-- Ensure PRs describe agent workflow adjustments (graph topology, new nodes/tools) so reviewers can verify LangGraph impacts quickly.
+- Follow Conventional Commits (`feat:`, `fix:`, etc.); the repo ships with Commitizen (`cz`) and will lint on release bumps.
+- PRs should include: summary of user impact, references to issue IDs, screenshots or logs for API/UI changes, and confirmation that `pytest` and `ruff` have been run.
+
+## Security & Configuration Tips
+- `.env` drives application settings via `core.config.get_settings`; never commit real keys.
+- Observability flags (`OTLP_ENDPOINT`, `OTLP_HEADERS`, `OTEL_LOGS_ENABLED`) live in `.env`; unset or disable them locally when exporters are unavailable.
+- Alembic reads `.env.migration`—ensure the file contains only migration-safe credentials and switch to temporary secrets for review apps.

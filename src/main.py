@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 
-from core import configure_logging, get_settings
+from core import configure_logging, get_settings, init_observability
 from metadata.api import router as metadata_router
 
 
 def create_app() -> FastAPI:
     configure_logging()
+    init_observability()
     settings = get_settings()
 
     application = FastAPI(title=settings.app_name, version=settings.version)

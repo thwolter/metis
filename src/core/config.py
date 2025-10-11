@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     log_level: Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'] = 'INFO'
     otlp_endpoint: str | None = None
     otlp_headers: str | None = None
+    otel_logs_enabled: bool = False
+    otel_traces_enabled: bool = True
+    otel_metrics_enabled: bool = True
 
     @property
     def pg_vector_url(self) -> SecretStr:
