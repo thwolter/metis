@@ -50,6 +50,10 @@ class RebuildJobDTO(CreateJobDTO):
     pass
 
 
+class ManualMetadataUpdateDTO(BaseModel):
+    metadata: MetadataSchema
+
+
 class JobCreatedResponse(BaseModel):
     job_id: UUID
     document_id: UUID

@@ -17,11 +17,18 @@ from metadata.schemas import (
     JobCancelResponse,
     JobCreatedResponse,
     JobStatusResponse,
+    ManualMetadataUpdateDTO,
     MetadataVersionResponse,
     RebuildJobDTO,
     VersionQuery,
 )
-from metadata.service import cancel_job, create_job, fetch_document_metadata, get_job
+from metadata.service import (
+    cancel_job,
+    create_job,
+    fetch_document_metadata,
+    get_job,
+    manual_metadata_update,
+)
 
 router = APIRouter(
     prefix='/v1',
@@ -152,6 +159,26 @@ def get_document_metadata(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Metadata not found')
 
+    metadata = MetadataSchema.model_validate(record.payload)
+    return MetadataVersionResponse(
+        document_id=record.document_id,
+        version=record.version,
+        fingerprint=record.fingerprint,
+        extracted_on=record.extracted_on,
+        metadata=metadata,
+    )
+
+
+@router.put(
+    '/documents/{document_id}/metadata',
+    response_model=MetadataVersionResponse,
+)
+def upsert_document_metadata(
+    document_id: UUID,
+    payload: ManualMetadataUpdateDTO,
+    session: Session = Depends(get_session),
+):
+    record = manual_metadata_update(session, document_id=document_id, metadata=payload.metadata)
     metadata = MetadataSchema.model_validate(record.payload)
     return MetadataVersionResponse(
         document_id=record.document_id,

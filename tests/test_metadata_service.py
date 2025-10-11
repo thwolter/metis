@@ -12,6 +12,7 @@ from metadata.schemas import CreateJobDTO
 from metadata.service import (
     create_job,
     fetch_document_metadata,
+    manual_metadata_update,
     merge_metadata,
     metadata_fingerprint,
     record_metadata_version,
@@ -111,3 +112,57 @@ def test_fetch_document_metadata_latest(engine):
     assert record is not None
     assert record.version == 2
     assert record.payload['company_name'] == 'ACME Group'
+
+
+def test_manual_metadata_update_creates_new_version(engine):
+    dto = _dto()
+    manual_metadata = dto.metadata
+    assert manual_metadata is not None
+    with session_ctx(engine) as session:
+        job = create_job(session, dto)
+        document_id = job.document_id
+
+    with session_ctx(engine) as session:
+        record = manual_metadata_update(session, document_id=document_id, metadata=manual_metadata)
+
+    assert record.version == 1
+    assert record.payload['company_name'] == 'ACME AG'
+
+
+def test_manual_metadata_update_increments_version_on_change(engine):
+    dto = _dto()
+    base_metadata = dto.metadata
+    assert base_metadata is not None
+    with session_ctx(engine) as session:
+        job = create_job(session, dto)
+        document_id = job.document_id
+
+    with session_ctx(engine) as session:
+        first = manual_metadata_update(session, document_id=document_id, metadata=base_metadata)
+
+    updated = base_metadata.model_copy(update={'company_name': 'ACME Group', 'reporting_year': 2024})
+
+    with session_ctx(engine) as session:
+        second = manual_metadata_update(session, document_id=document_id, metadata=updated)
+
+    assert first.version == 1
+    assert second.version == 2
+    assert second.payload['company_name'] == 'ACME Group'
+    assert second.payload['reporting_year'] == 2024
+
+
+def test_manual_metadata_update_skips_duplicate_payload(engine):
+    dto = _dto()
+    manual_metadata = dto.metadata
+    assert manual_metadata is not None
+    with session_ctx(engine) as session:
+        job = create_job(session, dto)
+        document_id = job.document_id
+
+    with session_ctx(engine) as session:
+        first = manual_metadata_update(session, document_id=document_id, metadata=manual_metadata)
+
+    with session_ctx(engine) as session:
+        second = manual_metadata_update(session, document_id=document_id, metadata=manual_metadata)
+
+    assert first.version == second.version == 1

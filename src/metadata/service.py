@@ -165,39 +165,6 @@ def record_metadata_version(
     return record
 
 
-@contextmanager
-def _vectorstore_connection(tenant_id: UUID):
-    conn = pg_connect(tenant_id)
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-def update_vecstore_metadata(context: ContextSchema, document_id: UUID, metadata: MetadataSchema) -> None:
-    """Update cmetadata for the given document inside langchain_pg_embedding."""
-    metadata_dict = metadata.model_dump(mode='json', exclude_none=True)
-    metadata_dict['digest'] = context.digest
-    meta_payload = json.dumps(metadata_dict)
-
-    try:
-        with _vectorstore_connection(context.tenant_id) as conn:
-            collection_uuid = get_collection_uuid(conn, context.collection_name)
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE langchain_pg_embedding
-                    SET cmetadata = COALESCE(cmetadata, '{}'::jsonb) || %s::jsonb
-                    WHERE collection_id = %s::uuid
-                      AND cmetadata ->> 'digest' = %s
-                    """,
-                    (meta_payload, str(collection_uuid), context.digest),
-                )
-            conn.commit()
-    except Exception:  # noqa: BLE001 - best-effort update, log only
-        logger.exception('Failed updating vecstore metadata for document %s', document_id)
-
-
 def fetch_document_metadata(
     session: Session,
     *,
@@ -230,3 +197,60 @@ def fetch_document_metadata(
     if record is not None:
         session.expunge(record)
     return record
+
+
+def manual_metadata_update(
+    session: Session,
+    *,
+    document_id: UUID,
+    metadata: MetadataSchema,
+) -> DocumentMetadata:
+    """Persist a manual metadata version, skipping agent processing."""
+    fingerprint = metadata_fingerprint(metadata)
+    existing = fetch_document_metadata(session, document_id=document_id, version='latest')
+    if existing and existing.fingerprint == fingerprint:
+        return existing
+
+    record = record_metadata_version(
+        session,
+        document_id=document_id,
+        metadata=metadata,
+        fingerprint=fingerprint,
+    )
+    session.commit()
+    session.refresh(record)
+    session.expunge(record)
+    return record
+
+
+@contextmanager
+def _vectorstore_connection(tenant_id: UUID):
+    conn = pg_connect(tenant_id)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def update_vecstore_metadata(context: ContextSchema, document_id: UUID, metadata: MetadataSchema) -> None:
+    """Update cmetadata for the given document inside langchain_pg_embedding."""
+    metadata_dict = metadata.model_dump(mode='json', exclude_none=True)
+    metadata_dict['digest'] = context.digest
+    meta_payload = json.dumps(metadata_dict)
+
+    try:
+        with _vectorstore_connection(context.tenant_id) as conn:
+            collection_uuid = get_collection_uuid(conn, context.collection_name)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE langchain_pg_embedding
+                    SET cmetadata = COALESCE(cmetadata, '{}'::jsonb) || %s::jsonb
+                    WHERE collection_id = %s::uuid
+                      AND cmetadata ->> 'digest' = %s
+                    """,
+                    (meta_payload, str(collection_uuid), context.digest),
+                )
+            conn.commit()
+    except Exception:  # noqa: BLE001 - best-effort update, log only
+        logger.exception('Failed updating vecstore metadata for document %s', document_id)
