@@ -22,6 +22,10 @@ class CreateJobDTO(BaseModel):
         default=None,
         description='Optional pre-filled metadata. Non-null fields are kept and not overwritten by the agent.',
     )
+    locked_fields: list[str] | None = Field(
+        default=None,
+        description='Explicit list of metadata fields that must not be overwritten; omit or pass [] to allow updates.',
+    )
     profile: str = Field(default='default', description='Processing profile (selects agent strategy).')
     priority: conint(ge=0, le=10) | None = Field(
         default=5, description='Processing priority (lower value → higher priority).'

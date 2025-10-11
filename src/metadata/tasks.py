@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
 from core.db import session_scope
 from core.logging import configure_logging
+from core.queueing import setup_broker
 from metadata.models import Job, JobStatus
 from metadata.service import (
     merge_metadata,
@@ -19,10 +21,17 @@ from metadata.service import (
 )
 
 configure_logging()
+setup_broker()
 logger = logging.getLogger(__name__)
 
 
-def _load_job(job_id: UUID) -> tuple[Job, ContextSchema, MetadataSchema | None, list[str]]:
+@dataclass(frozen=True, slots=True)
+class JobSnapshot:
+    job_id: UUID
+    document_id: UUID
+
+
+def _load_job(job_id: UUID) -> tuple[JobSnapshot, ContextSchema, MetadataSchema | None, list[str]]:
     with session_scope() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -35,6 +44,7 @@ def _load_job(job_id: UUID) -> tuple[Job, ContextSchema, MetadataSchema | None, 
         job.error_msg = None
         session.add(job)
         session.flush()
+        snapshot = JobSnapshot(job_id=job.job_id, document_id=job.document_id)
         context = ContextSchema.model_validate(job.context)
         base_metadata = (
             MetadataSchema.model_validate(job.input_metadata)
@@ -42,7 +52,7 @@ def _load_job(job_id: UUID) -> tuple[Job, ContextSchema, MetadataSchema | None, 
             else None
         )
         locked_fields = list(job.locked_fields)
-    return job, context, base_metadata, locked_fields
+    return snapshot, context, base_metadata, locked_fields
 
 
 def _run_agent(context: ContextSchema) -> MetadataSchema | None:
@@ -102,14 +112,14 @@ def _finalise_failure(job_id: UUID, exc: Exception) -> None:
 
 def _process_job(job_id: UUID) -> None:
     try:
-        job, context, base_metadata, locked_fields = _load_job(job_id)
+        snapshot, context, base_metadata, locked_fields = _load_job(job_id)
     except LookupError as exc:  # pragma: no cover - defensive
         logger.warning(str(exc))
         return
 
-    document_id = job.document_id
+    document_id = snapshot.document_id
     metadata_candidate: MetadataSchema | None = None
-    logger.info('Processing metadata job %s for document %s', job.job_id, document_id)
+    logger.info('Processing metadata job %s for document %s', snapshot.job_id, document_id)
     try:
         metadata_candidate = _run_agent(context)
         merged = merge_metadata(
@@ -119,14 +129,14 @@ def _process_job(job_id: UUID) -> None:
         )
         fingerprint = metadata_fingerprint(merged)
         update_vecstore_metadata(context, document_id, merged)
-        _finalise_success(job.job_id, metadata=merged, fingerprint=fingerprint)
-        logger.info('Metadata job %s completed successfully with fingerprint %s', job.job_id, fingerprint)
+        _finalise_success(snapshot.job_id, metadata=merged, fingerprint=fingerprint)
+        logger.info('Metadata job %s completed successfully with fingerprint %s', snapshot.job_id, fingerprint)
     except Exception as exc:  # noqa: BLE001 - capture all failures for job bookkeeping
         if metadata_candidate is None:
             logger.exception('Job %s failed during metadata generation', job_id)
         else:
             logger.exception('Job %s failed during persistence', job_id)
-        _finalise_failure(job_id, exc)
+        _finalise_failure(snapshot.job_id, exc)
 
 
 @dramatiq.actor

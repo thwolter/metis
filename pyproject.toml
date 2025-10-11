@@ -31,6 +31,7 @@ dependencies = [
 dev = [
     "anyio>=4.7.0",
     "commitizen>=4.9.1",
+    "dramatiq[watch]>=1.18.0",
     "isort>=6.1.0",
     "langgraph-cli[inmem]>=0.2.8",
     "pre-commit>=4.3.0",

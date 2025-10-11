@@ -34,7 +34,9 @@ def _metadata_to_dict(metadata: MetadataSchema | None) -> dict:
     return metadata.model_dump(mode='json')
 
 
-def _locked_fields(metadata: MetadataSchema | None) -> list[str]:
+def _locked_fields(metadata: MetadataSchema | None, explicit: list[str] | None) -> list[str]:
+    if explicit is not None:
+        return list(explicit)
     if metadata is None:
         return []
     return [name for name, value in metadata.model_dump().items() if value is not None]
@@ -65,7 +67,7 @@ def create_job(session: Session, dto: CreateJobDTO) -> Job:
         callback_url=str(dto.callback_url) if dto.callback_url else None,
         idempotency_key=dto.idempotency_key,
         input_metadata=_metadata_to_dict(dto.metadata),
-        locked_fields=_locked_fields(dto.metadata),
+        locked_fields=_locked_fields(dto.metadata, dto.locked_fields),
         context=dto.context.model_dump(mode='json'),
     )
 
@@ -173,11 +175,10 @@ def _vectorstore_connection(tenant_id: UUID):
 
 
 def update_vecstore_metadata(context: ContextSchema, document_id: UUID, metadata: MetadataSchema) -> None:
-    """Update meta/tags fields in vecstore.chunks for the given document."""
+    """Update cmetadata for the given document inside langchain_pg_embedding."""
     metadata_dict = metadata.model_dump(mode='json', exclude_none=True)
-    tags = metadata_dict.get('tags') or []
+    metadata_dict['digest'] = context.digest
     meta_payload = json.dumps(metadata_dict)
-    tags_payload = json.dumps(tags)
 
     try:
         with _vectorstore_connection(context.tenant_id) as conn:
@@ -185,13 +186,12 @@ def update_vecstore_metadata(context: ContextSchema, document_id: UUID, metadata
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    UPDATE vecstore.chunks
-                    SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb,
-                        tags = %s::jsonb
+                    UPDATE langchain_pg_embedding
+                    SET cmetadata = COALESCE(cmetadata, '{}'::jsonb) || %s::jsonb
                     WHERE collection_id = %s::uuid
-                      AND document_id = %s::uuid
+                      AND cmetadata ->> 'digest' = %s
                     """,
-                    (meta_payload, tags_payload, str(collection_uuid), str(document_id)),
+                    (meta_payload, str(collection_uuid), context.digest),
                 )
             conn.commit()
     except Exception:  # noqa: BLE001 - best-effort update, log only

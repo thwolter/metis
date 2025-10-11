@@ -16,7 +16,7 @@ echo "Starting Dramatiq worker..."
 : "${DRAMATIQ_THREADS:=8}"
 
 # shellcheck disable=SC2086
-dramatiq metadata.tasks:broker -p ${DRAMATIQ_PROCESSES} -t ${DRAMATIQ_THREADS} &
+dramatiq -p ${DRAMATIQ_PROCESSES} -t ${DRAMATIQ_THREADS} metadata.tasks &
 DRAMATIQ_PID=$!
 
 echo "Starting Uvicorn API..."

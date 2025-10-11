@@ -8,5 +8,12 @@
       <jdbc-url>jdbc:postgresql://217.160.125.151:5433/postgres?sslmode=require</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
+    <data-source source="LOCAL" name="Redis" uuid="1ad42250-187e-4c9e-b4cd-4e40a5318212">
+      <driver-ref>redis</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>jdbc.RedisDriver</jdbc-driver>
+      <jdbc-url>jdbc:redis://217.160.125.151:5436/1</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
   </component>
 </project>
