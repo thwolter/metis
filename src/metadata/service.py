@@ -20,6 +20,11 @@ from utils.vstore import get_collection_uuid, pg_connect
 logger = logging.getLogger(__name__)
 
 
+def _fingerprint_from_payload(payload: dict) -> str:
+    normalised = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+    return sha256(normalised.encode('utf-8')).hexdigest()
+
+
 def _metadata_to_dict(metadata: MetadataSchema | None) -> dict:
     if metadata is None:
         return {}
@@ -125,24 +130,30 @@ def next_metadata_version(session: Session, document_id: UUID) -> int:
 
 def metadata_fingerprint(metadata: MetadataSchema) -> str:
     payload = metadata.model_dump(mode='json', by_alias=True, exclude_none=False)
-    normalised = json.dumps(payload, sort_keys=True, separators=(',', ':'))
-    return sha256(normalised.encode('utf-8')).hexdigest()
+    return _fingerprint_from_payload(payload)
 
 
 def record_metadata_version(
     session: Session,
     *,
     document_id: UUID,
-    metadata: MetadataSchema,
+    metadata: MetadataSchema | None,
     fingerprint: str | None = None,
 ) -> DocumentMetadata:
     version = next_metadata_version(session, document_id)
-    fingerprint = fingerprint or metadata_fingerprint(metadata)
+
+    if metadata is None:
+        payload = {}  # empty payload when metadata is missing
+        fp = fingerprint or _fingerprint_from_payload(payload)
+    else:
+        payload = metadata.model_dump(mode='json')
+        fp = fingerprint or metadata_fingerprint(metadata)
+
     record = DocumentMetadata(
         document_id=document_id,
         version=version,
-        fingerprint=fingerprint,
-        payload=metadata.model_dump(mode='json'),
+        fingerprint=fp,
+        payload=payload,
     )
     session.add(record)
     session.flush()
@@ -193,7 +204,7 @@ def fetch_document_metadata(
     stmt = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
 
     if version is None or version == 'latest':
-        stmt = stmt.order_by(desc(DocumentMetadata.version))
+        stmt = stmt.order_by(desc('version'))
         result = session.exec(stmt)
         record = result.first()
         if record is not None:

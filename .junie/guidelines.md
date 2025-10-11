@@ -50,7 +50,6 @@
 
 ## Logging
 
-- Use `loguru`
 - Prefer structured JSON with `correlation_id`
 - Mask sensitive data; never log raw content
 

@@ -19,7 +19,7 @@ class JobStatus(str, Enum):
 
 
 class BaseSQLModel(SQLModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, from_attributes=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, from_attributes=True)  # type: ignore[bad-override]
 
 
 class Job(BaseSQLModel, table=True):

@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import dramatiq
+from loguru import logger
 
 from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
 from core.db import session_scope
-
 from metadata.models import Job, JobStatus
 from metadata.service import (
     merge_metadata,
@@ -16,9 +16,6 @@ from metadata.service import (
     record_metadata_version,
     update_vecstore_metadata,
 )
-from core.queueing import broker
-from loguru import logger
-
 
 
 def _load_job(job_id: UUID) -> tuple[Job, ContextSchema, MetadataSchema | None, list[str]]:

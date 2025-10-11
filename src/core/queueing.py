@@ -13,7 +13,7 @@ def _make_broker() -> RedisBroker:
     """Construct a Redis broker from settings. Fail fast if missing."""
     url = settings.redis_url.get_secret_value()
     if not url:
-        raise RuntimeError("REDIS_URL/redis_url is not configured")
+        raise RuntimeError('REDIS_URL/redis_url is not configured')
     return RedisBroker(url=url)
 
 
@@ -26,4 +26,4 @@ def setup_broker() -> None:
     if dramatiq.get_broker() is not None:
         return
     dramatiq.set_broker(broker)
-    logger.info("Dramatiq: configured Redis broker | url={}", broker.url if hasattr(broker, "url") else "<hidden>")
+    logger.info('Dramatiq: configured Redis broker | url={}', broker.url if hasattr(broker, 'url') else '<hidden>')

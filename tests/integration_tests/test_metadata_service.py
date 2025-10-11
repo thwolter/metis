@@ -27,10 +27,10 @@ def configure_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def engine():
-    original_job_schema = Job.__table__.schema
-    original_doc_schema = DocumentMetadata.__table__.schema
-    Job.__table__.schema = None
-    DocumentMetadata.__table__.schema = None
+    original_job_schema = Job.__table__.schema  # type: ignore[missing-attribute]
+    original_doc_schema = DocumentMetadata.__table__.schema  # type: ignore[missing-attribute]
+    Job.__table__.schema = None  # type: ignore[missing-attribute]
+    DocumentMetadata.__table__.schema = None  # type: ignore[missing-attribute]
 
     engine = create_engine('sqlite:///:memory:', connect_args={'check_same_thread': False})
     SQLModel.metadata.create_all(engine)
@@ -38,8 +38,8 @@ def engine():
     yield engine
 
     SQLModel.metadata.drop_all(engine)
-    Job.__table__.schema = original_job_schema
-    DocumentMetadata.__table__.schema = original_doc_schema
+    Job.__table__.schema = original_job_schema  # type: ignore[missing-attribute]
+    DocumentMetadata.__table__.schema = original_doc_schema  # type: ignore[missing-attribute]
 
 
 @contextmanager
