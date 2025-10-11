@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
-from loguru import logger
 
-from core import get_settings
+from core import configure_logging, get_settings
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -26,4 +30,5 @@ def setup_broker() -> None:
     if dramatiq.get_broker() is not None:
         return
     dramatiq.set_broker(broker)
-    logger.info('Dramatiq: configured Redis broker | url={}', broker.url if hasattr(broker, 'url') else '<hidden>')
+    broker_url = broker.url if hasattr(broker, 'url') else '<hidden>'
+    logger.info('Dramatiq Redis broker configured | url=%s', broker_url)

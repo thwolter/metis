@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 import dramatiq
-from loguru import logger
 
 from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
 from core.db import session_scope
+from core.logging import configure_logging
 from metadata.models import Job, JobStatus
 from metadata.service import (
     merge_metadata,
@@ -16,6 +17,9 @@ from metadata.service import (
     record_metadata_version,
     update_vecstore_metadata,
 )
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 
 def _load_job(job_id: UUID) -> tuple[Job, ContextSchema, MetadataSchema | None, list[str]]:
@@ -105,6 +109,7 @@ def _process_job(job_id: UUID) -> None:
 
     document_id = job.document_id
     metadata_candidate: MetadataSchema | None = None
+    logger.info('Processing metadata job %s for document %s', job.job_id, document_id)
     try:
         metadata_candidate = _run_agent(context)
         merged = merge_metadata(
@@ -115,6 +120,7 @@ def _process_job(job_id: UUID) -> None:
         fingerprint = metadata_fingerprint(merged)
         update_vecstore_metadata(context, document_id, merged)
         _finalise_success(job.job_id, metadata=merged, fingerprint=fingerprint)
+        logger.info('Metadata job %s completed successfully with fingerprint %s', job.job_id, fingerprint)
     except Exception as exc:  # noqa: BLE001 - capture all failures for job bookkeeping
         if metadata_candidate is None:
             logger.exception('Job %s failed during metadata generation', job_id)
@@ -130,3 +136,4 @@ def process_metadata_job(job_id: str) -> None:
 
 def enqueue_job(job_id: UUID) -> None:
     process_metadata_job.send(str(job_id))
+    logger.info('Enqueued metadata job %s', job_id)

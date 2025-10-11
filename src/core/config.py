@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr
     tavily_api_key: SecretStr
 
+    log_level: Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'] = 'INFO'
+    otlp_endpoint: str | None = None
+    otlp_headers: str | None = None
+
     @property
     def pg_vector_url(self) -> SecretStr:
         """Returns the PostgreSQL database URL for PGVector.

@@ -13,9 +13,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from agent.schemas import ContextSchema, MetadataSchema
+from core.logging import configure_logging
 from metadata.models import DocumentMetadata, Job, JobStatus
 from metadata.schemas import CreateJobDTO
 from utils.vstore import get_collection_uuid, pg_connect
+
+configure_logging()
 
 logger = logging.getLogger(__name__)
 
