@@ -9,6 +9,7 @@ from sqlmodel import Session
 
 from agent.schemas import MetadataSchema
 from core.db import get_session, session_scope
+from core.security import require_internal_auth
 from metadata import tasks
 from metadata.models import Job, JobStatus
 from metadata.schemas import (
@@ -22,7 +23,11 @@ from metadata.schemas import (
 )
 from metadata.service import cancel_job, create_job, fetch_document_metadata, get_job
 
-router = APIRouter(prefix='/v1', tags=['metadata'])
+router = APIRouter(
+    prefix='/v1',
+    tags=['metadata'],
+    dependencies=[Depends(require_internal_auth)],
+)
 
 TERMINAL_STATUSES = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
 

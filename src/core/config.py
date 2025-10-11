@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     otel_logs_enabled: bool = False
     otel_traces_enabled: bool = True
     otel_metrics_enabled: bool = True
+    internal_auth_token: SecretStr = SecretStr('dev-internal-token')
 
     @property
     def pg_vector_url(self) -> SecretStr:
