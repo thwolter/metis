@@ -79,6 +79,15 @@ def test_merge_metadata_respects_locked_fields():
     assert merged.tags == ['finance', 'annual']
 
 
+def test_create_job_defaults_to_no_locked_fields(engine):
+    dto = _dto()
+
+    with session_ctx(engine) as session:
+        job = create_job(session, dto)
+
+    assert job.locked_fields == []
+
+
 def test_metadata_fingerprint_idempotent():
     metadata = MetadataSchema(document_type='Annual Report', company_name='ACME AG')
     fp1 = metadata_fingerprint(metadata)

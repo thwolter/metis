@@ -20,7 +20,7 @@ class CreateJobDTO(BaseModel):
     context: ContextSchema
     metadata: MetadataSchema | None = Field(
         default=None,
-        description='Optional pre-filled metadata. Non-null fields are kept and not overwritten by the agent.',
+        description='Optional pre-filled metadata. Agent output may overwrite fields unless they are locked.',
     )
     locked_fields: list[str] | None = Field(
         default=None,

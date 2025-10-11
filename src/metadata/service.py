@@ -37,9 +37,7 @@ def _metadata_to_dict(metadata: MetadataSchema | None) -> dict:
 def _locked_fields(metadata: MetadataSchema | None, explicit: list[str] | None) -> list[str]:
     if explicit is not None:
         return list(explicit)
-    if metadata is None:
-        return []
-    return [name for name, value in metadata.model_dump().items() if value is not None]
+    return []
 
 
 def _job_lookup(session: Session, *, job: Job) -> Job:
