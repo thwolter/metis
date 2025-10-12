@@ -11,7 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Build dependencies once; runtime stage stays slimmer.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libpq-dev curl ca-certificates \
+    && apt-get install -y --no-install-recommends build-essential libpq-dev curl ca-certificates git \
     && python -m venv "$VIRTUAL_ENV" \
     && pip install --upgrade pip setuptools wheel \
     && rm -rf /var/lib/apt/lists/*
@@ -23,7 +23,7 @@ COPY src ./src
 
 # Pre-build wheels so the final stage can install quickly from cache.
 RUN pip wheel --no-deps --wheel-dir /tmp/wheels "uvicorn[standard]>=0.34.0" \
-    && pip wheel --wheel-dir /tmp/wheels .
+    && pip wheel --no-deps --wheel-dir /tmp/wheels .
 
 
 FROM python:${PYTHON_VERSION} AS runtime
@@ -36,7 +36,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:$PATH
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq-dev curl ca-certificates \
+    && apt-get install -y --no-install-recommends build-essential libpq-dev curl ca-certificates git \
     && python -m venv "$VIRTUAL_ENV" \
     && pip install --upgrade pip \
     && rm -rf /var/lib/apt/lists/*
