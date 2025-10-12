@@ -3,7 +3,7 @@ name = "metis"
 version = "0.2.0"
 description = "Classify documents and extract metadata using embedded document chunks."
 authors = [
-    { name = "Thomas Wolter", email = "thwolter@gmail.com" },
+    { name = "Thomas Wolter", email = "support@riskary.de" },
 ]
 readme = "README.md"
 license = { text = "MIT" }

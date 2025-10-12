@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     )
 
     env: Literal['development', 'production', 'testing'] = 'production'
-    app_name: str = 'FastAPI'
+    app_name: str = 'Metis'
     debug: bool | None = None
-    version: str = '0.1.0'
+    version: str = '0.2.0'
     admin_email: str = 'support@riskary.de'
 
     postgres_url: SecretStr
