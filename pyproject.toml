@@ -26,6 +26,7 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "dramatiq>=1.16.0",
     "redis>=6.4.0",
+    "tenauth @ git+https://github.com/thwolter/fde-tenauth.git@main",
 ]
 [dependency-groups]
 dev = [

@@ -6,10 +6,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlmodel import Session
+from tenauth.fastapi import require_auth
 
 from agent.schemas import MetadataSchema
 from core.db import get_session, session_scope
-from core.security import require_internal_auth
 from metadata import tasks
 from metadata.models import Job, JobStatus
 from metadata.schemas import (
@@ -33,7 +33,7 @@ from metadata.service import (
 router = APIRouter(
     prefix='/v1',
     tags=['metadata'],
-    dependencies=[Depends(require_internal_auth)],
+    dependencies=[Depends(require_auth)],
 )
 
 TERMINAL_STATUSES = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}

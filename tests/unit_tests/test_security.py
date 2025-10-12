@@ -1,46 +1,70 @@
+from __future__ import annotations
+
+import base64
+import json
+from collections.abc import Iterator
+from uuid import uuid4
+
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+from tenauth.fastapi import require_auth
+from tenauth.schemas import AuthContext
 
-from core.config import get_settings
-from core.security import INTERNAL_AUTH_HEADER, require_internal_auth
+
+def _build_token(*, user_id: str | None = None, tenant_id: str | None = None) -> str:
+    payload = {
+        'sub': user_id or str(uuid4()),
+        'tid': tenant_id or str(uuid4()),
+    }
+    header = (
+        base64.urlsafe_b64encode(json.dumps({'alg': 'none', 'typ': 'JWT'}).encode('utf-8')).decode('utf-8').rstrip('=')
+    )
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode('utf-8')).decode('utf-8').rstrip('=')
+    # Signature part may be empty; we keep trailing dot for readability
+    return f'{header}.{body}.'
 
 
 def _protected_app() -> FastAPI:
     app = FastAPI()
 
-    @app.get('/protected', dependencies=[Depends(require_internal_auth)])
-    def protected():
-        return {'status': 'ok'}
+    @app.get('/protected')
+    def protected(auth: AuthContext = Depends(require_auth)):
+        return {'tenant_id': str(auth.tid), 'user_id': str(auth.sub)}
 
     return app
 
 
 @pytest.fixture
-def protected_client(monkeypatch: pytest.MonkeyPatch):
-    token = 'secret-token'
-    get_settings.cache_clear()
-    monkeypatch.setenv('INTERNAL_AUTH_TOKEN', token)
+def protected_client() -> Iterator[TestClient]:
     client = TestClient(_protected_app())
-    yield client, token
+    yield client
     client.close()
-    get_settings.cache_clear()
 
 
-def test_missing_token_rejected(protected_client):
-    client, _ = protected_client
-    response = client.get('/protected')
+def test_missing_authorization_header_returns_401(protected_client: TestClient):
+    response = protected_client.get('/protected')
     assert response.status_code == 401
+    assert response.json()['detail'] == 'Missing Authorization header'
 
 
-def test_invalid_token_rejected(protected_client):
-    client, _ = protected_client
-    response = client.get('/protected', headers={INTERNAL_AUTH_HEADER: 'wrong'})
+def test_invalid_scheme_returns_401(protected_client: TestClient):
+    token = _build_token()
+    response = protected_client.get('/protected', headers={'Authorization': f'Basic {token}'})
     assert response.status_code == 401
+    assert response.json()['detail'] == 'Missing Authorization header'
 
 
-def test_valid_token_allowed(protected_client):
-    client, token = protected_client
-    response = client.get('/protected', headers={INTERNAL_AUTH_HEADER: token})
+def test_malformed_token_returns_401(protected_client: TestClient):
+    response = protected_client.get('/protected', headers={'Authorization': 'Bearer invalid-token'})
+    assert response.status_code == 401
+    assert response.json()['detail'] == 'Invalid token'
+
+
+def test_valid_token_allows_access(protected_client: TestClient):
+    user_id = str(uuid4())
+    tenant_id = str(uuid4())
+    token = _build_token(user_id=user_id, tenant_id=tenant_id)
+    response = protected_client.get('/protected', headers={'Authorization': f'Bearer {token}'})
     assert response.status_code == 200
-    assert response.json() == {'status': 'ok'}
+    assert response.json() == {'tenant_id': tenant_id, 'user_id': user_id}

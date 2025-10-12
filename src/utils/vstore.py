@@ -3,9 +3,9 @@ from uuid import UUID
 import psycopg2
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
+from tenauth.tenancy import dsn_with_tenant
 
 from core.config import get_settings
-from core.tenancy import dsn_with_tenant
 
 settings = get_settings()
 
