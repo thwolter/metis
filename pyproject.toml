@@ -35,6 +35,7 @@ dev = [
     "dramatiq[watch]>=1.18.0",
     "isort>=6.1.0",
     "langgraph-cli[inmem]>=0.2.8",
+    "mkdocs>=1.6.1",
     "pre-commit>=4.3.0",
     "pyrefly>=0.36.1",
     "pytest>=8.3.5",

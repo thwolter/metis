@@ -1,0 +1,11 @@
+site_name: FDE Classifier
+site_description: Tenant-aware metadata extraction service
+site_url: ""
+repo_url: "https://github.com/thwolter/fde-classifier"
+docs_dir: docs
+theme:
+  name: readthedocs
+nav:
+  - Overview: index.md
+  - API:
+      - Metadata API: frontend_api_spec.md
