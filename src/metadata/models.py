@@ -41,6 +41,7 @@ class Job(BaseSQLModel, table=True):
 
     job_id: UUID = Field(default_factory=uuid4, primary_key=True)
     tenant_id: UUID
+    user_id: UUID
     document_id: UUID
     profile: str
     ingestion_fingerprint: str
@@ -77,10 +78,11 @@ class DocumentMetadata(BaseSQLModel, table=True):
 
     __tablename__ = 'document_metadata'  # type: ignore[bad-argument-type]
     __table_args__ = (
-        Index('ix_docmeta_doc_version', 'document_id', 'version', unique=True),
+        Index('ix_docmeta_tenant_doc_version', 'tenant_id', 'document_id', 'version', unique=True),
         {'schema': 'metadata'},
     )
 
+    tenant_id: UUID = Field(primary_key=True)
     document_id: UUID = Field(primary_key=True)
     version: int = Field(primary_key=True)
     fingerprint: str

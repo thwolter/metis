@@ -2,7 +2,7 @@
 
 ## Base URL and Authentication
 - **Service root**: all versioned endpoints live under `/v1`. Combine with the environment host, for example `https://metadata.internal.example.com/v1`.
-- **Authentication**: every request must send the header `X-Internal-Auth: <token>`. The token is configured in the backend (`internal_auth_token` from `.env`). Missing or mismatched values return `401 Unauthorized`.
+- **Authentication**: every request must send `Authorization: Bearer <jwt>`. Tokens are decoded with `tenauth` and must contain `tid` (tenant) and `sub` (user) claims. Missing or malformed tokens return `401 Unauthorized`.
 - **Content type**: request and response bodies are JSON encoded using UTF-8.
 
 ## Common Data Structures
@@ -88,7 +88,7 @@ Create a metadata extraction job. Jobs are idempotent per `(tenant_id, document_
 Note: `result_url` is present only if the job finishes successfully during the wait window.
 
 **Error responses**
-- `401 Unauthorized` when `X-Internal-Auth` is missing or invalid.
+- `401 Unauthorized` when the Bearer token is missing or invalid.
 - `422 Unprocessable Entity` for validation errors (e.g., malformed UUIDs or dates).
 
 ### POST `/v1/documents/{document_id}/rebuild`

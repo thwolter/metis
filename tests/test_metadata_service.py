@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
+from tenauth.schemas import AccessContext
 
 from agent.schemas import ContextSchema, MetadataSchema
 from metadata.models import DocumentMetadata, Job
@@ -68,6 +69,10 @@ def _dto(document_id: UUID | None = None) -> CreateJobDTO:
     )
 
 
+def _access(dto: CreateJobDTO, *, user_id: UUID | None = None) -> AccessContext:
+    return AccessContext(tenant_id=dto.context.tenant_id, user_id=user_id or uuid4())
+
+
 def test_merge_metadata_respects_locked_fields():
     base = MetadataSchema(document_type='Annual Report', company_name='ACME AG', tags=['esg'])
     generated = MetadataSchema(document_type='Other', tags=['finance', 'annual'])
@@ -81,9 +86,10 @@ def test_merge_metadata_respects_locked_fields():
 
 def test_create_job_defaults_to_no_locked_fields(engine):
     dto = _dto()
+    access = _access(dto)
 
     with session_ctx(engine) as session:
-        job = create_job(session, dto)
+        job = create_job(session, dto, access_context=access)
 
     assert job.locked_fields == []
 
@@ -97,26 +103,43 @@ def test_metadata_fingerprint_idempotent():
 
 def test_create_job_is_idempotent(engine):
     dto = _dto()
+    access = _access(dto)
     with session_ctx(engine) as session:
-        job1 = create_job(session, dto)
-        job2 = create_job(session, dto)
+        job1 = create_job(session, dto, access_context=access)
+        job2 = create_job(session, dto, access_context=access)
 
     assert job1.job_id == job2.job_id
 
 
 def test_fetch_document_metadata_latest(engine):
     dto = _dto()
+    access = _access(dto)
     with session_ctx(engine) as session:
-        job = create_job(session, dto)
-        record_metadata_version(session, document_id=job.document_id, metadata=dto.metadata)
+        job = create_job(session, dto, access_context=access)
+        record_metadata_version(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=job.document_id,
+            metadata=dto.metadata,
+        )
         session.commit()
 
         updated = MetadataSchema(document_type='Annual Report', company_name='ACME Group', reporting_year=2024)
-        record_metadata_version(session, document_id=job.document_id, metadata=updated)
+        record_metadata_version(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=job.document_id,
+            metadata=updated,
+        )
         session.commit()
 
     with session_ctx(engine) as session:
-        record = fetch_document_metadata(session, document_id=job.document_id, version='latest')
+        record = fetch_document_metadata(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=job.document_id,
+            version='latest',
+        )
 
     assert record is not None
     assert record.version == 2
@@ -127,12 +150,18 @@ def test_manual_metadata_update_creates_new_version(engine):
     dto = _dto()
     manual_metadata = dto.metadata
     assert manual_metadata is not None
+    access = _access(dto)
     with session_ctx(engine) as session:
-        job = create_job(session, dto)
+        job = create_job(session, dto, access_context=access)
         document_id = job.document_id
 
     with session_ctx(engine) as session:
-        record = manual_metadata_update(session, document_id=document_id, metadata=manual_metadata)
+        record = manual_metadata_update(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=document_id,
+            metadata=manual_metadata,
+        )
 
     assert record.version == 1
     assert record.payload['company_name'] == 'ACME AG'
@@ -142,17 +171,28 @@ def test_manual_metadata_update_increments_version_on_change(engine):
     dto = _dto()
     base_metadata = dto.metadata
     assert base_metadata is not None
+    access = _access(dto)
     with session_ctx(engine) as session:
-        job = create_job(session, dto)
+        job = create_job(session, dto, access_context=access)
         document_id = job.document_id
 
     with session_ctx(engine) as session:
-        first = manual_metadata_update(session, document_id=document_id, metadata=base_metadata)
+        first = manual_metadata_update(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=document_id,
+            metadata=base_metadata,
+        )
 
     updated = base_metadata.model_copy(update={'company_name': 'ACME Group', 'reporting_year': 2024})
 
     with session_ctx(engine) as session:
-        second = manual_metadata_update(session, document_id=document_id, metadata=updated)
+        second = manual_metadata_update(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=document_id,
+            metadata=updated,
+        )
 
     assert first.version == 1
     assert second.version == 2
@@ -164,14 +204,25 @@ def test_manual_metadata_update_skips_duplicate_payload(engine):
     dto = _dto()
     manual_metadata = dto.metadata
     assert manual_metadata is not None
+    access = _access(dto)
     with session_ctx(engine) as session:
-        job = create_job(session, dto)
+        job = create_job(session, dto, access_context=access)
         document_id = job.document_id
 
     with session_ctx(engine) as session:
-        first = manual_metadata_update(session, document_id=document_id, metadata=manual_metadata)
+        first = manual_metadata_update(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=document_id,
+            metadata=manual_metadata,
+        )
 
     with session_ctx(engine) as session:
-        second = manual_metadata_update(session, document_id=document_id, metadata=manual_metadata)
+        second = manual_metadata_update(
+            session,
+            tenant_id=access.tenant_id,
+            document_id=document_id,
+            metadata=manual_metadata,
+        )
 
     assert first.version == second.version == 1

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import dramatiq
+from tenauth.schemas import AccessContext
 
 from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
@@ -31,8 +32,11 @@ class JobSnapshot:
     document_id: UUID
 
 
-def _load_job(job_id: UUID) -> tuple[JobSnapshot, ContextSchema, MetadataSchema | None, list[str]]:
-    with session_scope() as session:
+def _load_job(
+    job_id: UUID,
+    access_context: AccessContext,
+) -> tuple[JobSnapshot, ContextSchema, MetadataSchema | None, list[str]]:
+    with session_scope(access_context=access_context) as session:
         job = session.get(Job, job_id)
         if job is None:
             raise LookupError(f'Job {job_id} not found')
@@ -74,8 +78,9 @@ def _finalise_success(
     *,
     metadata: MetadataSchema,
     fingerprint: str,
+    access_context: AccessContext,
 ) -> None:
-    with session_scope() as session:
+    with session_scope(access_context=access_context) as session:
         job = session.get(Job, job_id)
         if job is None:
             logger.warning('Job %s disappeared before completion', job_id)
@@ -86,6 +91,7 @@ def _finalise_success(
 
         record_metadata_version(
             session,
+            tenant_id=job.tenant_id,
             document_id=job.document_id,
             metadata=metadata,
             fingerprint=fingerprint,
@@ -97,8 +103,8 @@ def _finalise_success(
         session.add(job)
 
 
-def _finalise_failure(job_id: UUID, exc: Exception) -> None:
-    with session_scope() as session:
+def _finalise_failure(job_id: UUID, exc: Exception, access_context: AccessContext) -> None:
+    with session_scope(access_context=access_context) as session:
         job = session.get(Job, job_id)
         if job is None:
             return
@@ -110,9 +116,9 @@ def _finalise_failure(job_id: UUID, exc: Exception) -> None:
         session.add(job)
 
 
-def _process_job(job_id: UUID) -> None:
+def _process_job(job_id: UUID, access_context: AccessContext) -> None:
     try:
-        snapshot, context, base_metadata, locked_fields = _load_job(job_id)
+        snapshot, context, base_metadata, locked_fields = _load_job(job_id, access_context)
     except LookupError as exc:  # pragma: no cover - defensive
         logger.warning(str(exc))
         return
@@ -129,21 +135,27 @@ def _process_job(job_id: UUID) -> None:
         )
         fingerprint = metadata_fingerprint(merged)
         update_vecstore_metadata(context, document_id, merged)
-        _finalise_success(snapshot.job_id, metadata=merged, fingerprint=fingerprint)
+        _finalise_success(
+            snapshot.job_id,
+            metadata=merged,
+            fingerprint=fingerprint,
+            access_context=access_context,
+        )
         logger.info('Metadata job %s completed successfully with fingerprint %s', snapshot.job_id, fingerprint)
     except Exception as exc:  # noqa: BLE001 - capture all failures for job bookkeeping
         if metadata_candidate is None:
             logger.exception('Job %s failed during metadata generation', job_id)
         else:
             logger.exception('Job %s failed during persistence', job_id)
-        _finalise_failure(snapshot.job_id, exc)
+        _finalise_failure(snapshot.job_id, exc, access_context)
 
 
 @dramatiq.actor
-def process_metadata_job(job_id: str) -> None:
-    _process_job(UUID(job_id))
+def process_metadata_job(job_id: str, tenant_id: str, user_id: str) -> None:
+    access_context = AccessContext(tenant_id=UUID(tenant_id), user_id=UUID(user_id))
+    _process_job(UUID(job_id), access_context)
 
 
-def enqueue_job(job_id: UUID) -> None:
-    process_metadata_job.send(str(job_id))
+def enqueue_job(job_id: UUID, tenant_id: UUID, user_id: UUID) -> None:
+    process_metadata_job.send(str(job_id), str(tenant_id), str(user_id))
     logger.info('Enqueued metadata job %s', job_id)

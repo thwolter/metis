@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
+from tenauth.schemas import AccessContext
 
 from agent.schemas import ContextSchema, MetadataSchema
 from core.logging import configure_logging
@@ -51,13 +52,17 @@ def _job_lookup(session: Session, *, job: Job) -> Job:
     return existing
 
 
-def create_job(session: Session, dto: CreateJobDTO) -> Job:
+def create_job(session: Session, dto: CreateJobDTO, *, access_context: AccessContext) -> Job:
     """Create or return an idempotent metadata job."""
     document_id = dto.resolved_document_id()
     ingestion_fingerprint = dto.idempotency_key or dto.context.digest
+    tenant_id = access_context.tenant_id
+    if dto.context.tenant_id != tenant_id:
+        raise ValueError('Payload tenant does not match authenticated tenant')
 
     job = Job(
-        tenant_id=dto.context.tenant_id,
+        tenant_id=tenant_id,
+        user_id=access_context.user_id,
         document_id=document_id,
         profile=dto.profile,
         ingestion_fingerprint=ingestion_fingerprint,
@@ -125,8 +130,11 @@ def merge_metadata(
     return MetadataSchema.model_validate(merged)
 
 
-def next_metadata_version(session: Session, document_id: UUID) -> int:
-    stmt = select(DocumentMetadata.version).where(DocumentMetadata.document_id == document_id)
+def next_metadata_version(session: Session, tenant_id: UUID, document_id: UUID) -> int:
+    stmt = select(DocumentMetadata.version).where(
+        DocumentMetadata.tenant_id == tenant_id,
+        DocumentMetadata.document_id == document_id,
+    )
     versions = session.exec(stmt).all()
     return max(versions, default=0) + 1
 
@@ -139,11 +147,12 @@ def metadata_fingerprint(metadata: MetadataSchema) -> str:
 def record_metadata_version(
     session: Session,
     *,
+    tenant_id: UUID,
     document_id: UUID,
     metadata: MetadataSchema | None,
     fingerprint: str | None = None,
 ) -> DocumentMetadata:
-    version = next_metadata_version(session, document_id)
+    version = next_metadata_version(session, tenant_id, document_id)
 
     if metadata is None:
         payload = {}  # empty payload when metadata is missing
@@ -153,6 +162,7 @@ def record_metadata_version(
         fp = fingerprint or metadata_fingerprint(metadata)
 
     record = DocumentMetadata(
+        tenant_id=tenant_id,
         document_id=document_id,
         version=version,
         fingerprint=fp,
@@ -166,10 +176,14 @@ def record_metadata_version(
 def fetch_document_metadata(
     session: Session,
     *,
+    tenant_id: UUID,
     document_id: UUID,
     version: str | None,
 ) -> DocumentMetadata | None:
-    stmt = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
+    stmt = select(DocumentMetadata).where(
+        DocumentMetadata.tenant_id == tenant_id,
+        DocumentMetadata.document_id == document_id,
+    )
 
     if version is None or version == 'latest':
         stmt = stmt.order_by(desc('version'))
@@ -200,17 +214,19 @@ def fetch_document_metadata(
 def manual_metadata_update(
     session: Session,
     *,
+    tenant_id: UUID,
     document_id: UUID,
     metadata: MetadataSchema,
 ) -> DocumentMetadata:
     """Persist a manual metadata version, skipping agent processing."""
     fingerprint = metadata_fingerprint(metadata)
-    existing = fetch_document_metadata(session, document_id=document_id, version='latest')
+    existing = fetch_document_metadata(session, tenant_id=tenant_id, document_id=document_id, version='latest')
     if existing and existing.fingerprint == fingerprint:
         return existing
 
     record = record_metadata_version(
         session,
+        tenant_id=tenant_id,
         document_id=document_id,
         metadata=metadata,
         fingerprint=fingerprint,

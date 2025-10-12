@@ -1,15 +1,16 @@
 import importlib
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, create_engine
+from tenauth.schemas import AccessContext
 
 from core.config import get_settings
-from core.db import get_session
+from metadata import api as metadata_api
 from metadata.models import DocumentMetadata, Job
 
 
@@ -28,12 +29,12 @@ class _DummyBroker:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch):
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     # Ensure settings pick up test configuration and prevent real broker setup.
-    monkeypatch.setenv('INTERNAL_AUTH_TOKEN', 'test-token')
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     monkeypatch.setenv('TAVILY_API_KEY', 'test-key')
-    monkeypatch.setenv('POSTGRES_URL', 'sqlite:///:memory:')
+    db_path = tmp_path / 'test.db'
+    monkeypatch.setenv('POSTGRES_URL', f'sqlite:///{db_path}')
     monkeypatch.setenv('REDIS_URL', 'redis://localhost:6379/0')
     monkeypatch.setenv('PYTEST_CURRENT_TEST', 'manual-metadata')
     get_settings.cache_clear()
@@ -53,9 +54,8 @@ def client(monkeypatch: pytest.MonkeyPatch):
     app = main.create_app()
 
     engine = create_engine(
-        'sqlite:///:memory:',
+        f'sqlite:///{db_path}',
         connect_args={'check_same_thread': False},
-        poolclass=StaticPool,
     )
 
     original_job_schema = Job.__table__.schema  # type: ignore[missing-attribute]
@@ -63,27 +63,41 @@ def client(monkeypatch: pytest.MonkeyPatch):
     Job.__table__.schema = None  # type: ignore[missing-attribute]
     DocumentMetadata.__table__.schema = None  # type: ignore[missing-attribute]
 
-    SQLModel.metadata.create_all(engine)
+    Job.__table__.create(engine)  # type:ignore[missing-attribute]
+    DocumentMetadata.__table__.create(engine)  # type:ignore[missing-attribute]
 
-    def override_get_session():
-        with Session(engine) as session:
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    def override_access_context():
+        return AccessContext(tenant_id=tenant_id, user_id=user_id)
+
+    def override_scoped_session():
+        session = Session(engine)
+        try:
             yield session
+            session.commit()
+        finally:
+            session.close()
 
-    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[metadata_api.require_access_context] = override_access_context
+    app.dependency_overrides[metadata_api.get_scoped_session] = override_scoped_session
 
     with TestClient(app) as test_client:
         yield test_client
 
-    SQLModel.metadata.drop_all(engine)
+    app.dependency_overrides.clear()
+    DocumentMetadata.__table__.drop(engine)  # type:ignore[missing-attribute]
+    Job.__table__.drop(engine)  # type:ignore[missing-attribute]
     Job.__table__.schema = original_job_schema  # type: ignore[missing-attribute]
     DocumentMetadata.__table__.schema = original_doc_schema  # type: ignore[missing-attribute]
     get_settings.cache_clear()
+    if db_path.exists():
+        db_path.unlink()
 
 
 def test_put_metadata_creates_versions(client):
     document_id = uuid4()
-    headers = {'X-Internal-Auth': 'test-token'}
-
     payload = {
         'metadata': {
             'document_type': 'Annual Report',
@@ -91,7 +105,7 @@ def test_put_metadata_creates_versions(client):
         }
     }
 
-    response = client.put(f'/v1/documents/{document_id}/metadata', json=payload, headers=headers)
+    response = client.put(f'/v1/documents/{document_id}/metadata', json=payload)
     assert response.status_code == 200
     body = response.json()
     assert body['version'] == 1
@@ -105,7 +119,7 @@ def test_put_metadata_creates_versions(client):
         }
     }
 
-    response = client.put(f'/v1/documents/{document_id}/metadata', json=updated_payload, headers=headers)
+    response = client.put(f'/v1/documents/{document_id}/metadata', json=updated_payload)
     assert response.status_code == 200
     body = response.json()
     assert body['version'] == 2
