@@ -1,5 +1,5 @@
 [project]
-name = "classifier"
+name = "metis"
 version = "0.2.0"
 description = "Classify documents and extract metadata using embedded document chunks."
 authors = [
