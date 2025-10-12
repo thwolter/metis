@@ -82,12 +82,7 @@ async def create_metadata_job(
     wait_for_secs: int = Query(default=0, ge=0, le=30),
     access: AccessContext = Depends(require_access_context),
 ):
-    if payload.context.tenant_id != access.tenant_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Tenant mismatch')
-    try:
-        job = create_job(session, payload, access_context=access)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    job = create_job(session, payload, access_context=access)
     tasks.enqueue_job(job.job_id, job.tenant_id, job.user_id)
 
     response = JobCreatedResponse(
@@ -115,12 +110,7 @@ async def rebuild_document_metadata(
     access: AccessContext = Depends(require_access_context),
 ):
     job_payload = payload.model_copy(update={'document_id': document_id})
-    if job_payload.context.tenant_id != access.tenant_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Tenant mismatch')
-    try:
-        job = create_job(session, job_payload, access_context=access)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    job = create_job(session, job_payload, access_context=access)
     tasks.enqueue_job(job.job_id, job.tenant_id, job.user_id)
     return JobCreatedResponse(
         job_id=job.job_id,

@@ -7,12 +7,12 @@
 
 ## Common Data Structures
 
-### ContextSchema
+### JobContextPayload
 | Field | Type | Notes |
 | --- | --- | --- |
 | `digest` | string (`SHA256B64`) | Base64-encoded SHA-256 hash of the document. Used for idempotency. |
 | `collection_name` | string | Logical collection in the vector store. |
-| `tenant_id` | UUID | Tenant identifier that scopes storage and permissions. |
+| _implicit tenant_ | derived | The backend injects the tenant from the JWT (`tid`) claim; clients must not send it. |
 
 ### MetadataSchema
 | Field | Type | Notes |
@@ -65,7 +65,7 @@ Create a metadata extraction job. Jobs are idempotent per `(tenant_id, document_
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `document_id` | UUID \| null | optional | If omitted, the backend derives an ID from `context.digest`. |
-| `context` | ContextSchema | yes | See schema above. |
+| `context` | JobContextPayload | yes | Backend augments this payload with the tenant from the JWT (`tid`). |
 | `metadata` | MetadataSchema \| null | optional | Seed values. Agent output may overwrite unlocked fields. |
 | `locked_fields` | string[] \| null | optional | Fields that must remain unchanged even if the agent proposes values. Empty list or omission allows full overwrite. |
 | `profile` | string | yes (default `"default"`) | Selects the agent strategy. |

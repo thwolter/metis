@@ -7,9 +7,9 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine
 from tenauth.schemas import AccessContext
 
-from agent.schemas import ContextSchema, MetadataSchema
+from agent.schemas import MetadataSchema
 from metadata.models import DocumentMetadata, Job
-from metadata.schemas import CreateJobDTO
+from metadata.schemas import CreateJobDTO, JobContextPayload
 from metadata.service import (
     create_job,
     fetch_document_metadata,
@@ -52,10 +52,9 @@ def session_ctx(engine):
 
 
 def _dto(document_id: UUID | None = None) -> CreateJobDTO:
-    context = ContextSchema(
+    context = JobContextPayload(
         digest='A' * 43 + '=',
         collection_name='default',
-        tenant_id=uuid4(),
     )
     metadata = MetadataSchema(document_type='Annual Report', company_name='ACME AG')
     return CreateJobDTO(
@@ -69,8 +68,8 @@ def _dto(document_id: UUID | None = None) -> CreateJobDTO:
     )
 
 
-def _access(dto: CreateJobDTO, *, user_id: UUID | None = None) -> AccessContext:
-    return AccessContext(tenant_id=dto.context.tenant_id, user_id=user_id or uuid4())
+def _access(*, tenant_id: UUID | None = None, user_id: UUID | None = None) -> AccessContext:
+    return AccessContext(tenant_id=tenant_id or uuid4(), user_id=user_id or uuid4())
 
 
 def test_merge_metadata_respects_locked_fields():
@@ -86,7 +85,7 @@ def test_merge_metadata_respects_locked_fields():
 
 def test_create_job_defaults_to_no_locked_fields(engine):
     dto = _dto()
-    access = _access(dto)
+    access = _access()
 
     with session_ctx(engine) as session:
         job = create_job(session, dto, access_context=access)
@@ -103,7 +102,7 @@ def test_metadata_fingerprint_idempotent():
 
 def test_create_job_is_idempotent(engine):
     dto = _dto()
-    access = _access(dto)
+    access = _access()
     with session_ctx(engine) as session:
         job1 = create_job(session, dto, access_context=access)
         job2 = create_job(session, dto, access_context=access)
@@ -113,7 +112,7 @@ def test_create_job_is_idempotent(engine):
 
 def test_fetch_document_metadata_latest(engine):
     dto = _dto()
-    access = _access(dto)
+    access = _access()
     with session_ctx(engine) as session:
         job = create_job(session, dto, access_context=access)
         record_metadata_version(
@@ -150,7 +149,7 @@ def test_manual_metadata_update_creates_new_version(engine):
     dto = _dto()
     manual_metadata = dto.metadata
     assert manual_metadata is not None
-    access = _access(dto)
+    access = _access()
     with session_ctx(engine) as session:
         job = create_job(session, dto, access_context=access)
         document_id = job.document_id
@@ -171,7 +170,7 @@ def test_manual_metadata_update_increments_version_on_change(engine):
     dto = _dto()
     base_metadata = dto.metadata
     assert base_metadata is not None
-    access = _access(dto)
+    access = _access()
     with session_ctx(engine) as session:
         job = create_job(session, dto, access_context=access)
         document_id = job.document_id
@@ -204,7 +203,7 @@ def test_manual_metadata_update_skips_duplicate_payload(engine):
     dto = _dto()
     manual_metadata = dto.metadata
     assert manual_metadata is not None
-    access = _access(dto)
+    access = _access()
     with session_ctx(engine) as session:
         job = create_job(session, dto, access_context=access)
         document_id = job.document_id

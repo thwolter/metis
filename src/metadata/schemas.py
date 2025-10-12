@@ -8,8 +8,14 @@ from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints, conint
 
 from agent.schemas import ContextSchema, MetadataSchema
 from metadata.models import JobStatus
+from utils.types import SHA256B64
 
 METADATA_DOCUMENT_NAMESPACE = UUID('6e14968a-5b92-4774-a1f0-655f4eca8ef8')
+
+
+class JobContextPayload(BaseModel):
+    digest: SHA256B64 = Field(..., description='The SHA256B64 hash of the document')
+    collection_name: str = Field(..., description='The name of the collection')
 
 
 class CreateJobDTO(BaseModel):
@@ -17,7 +23,7 @@ class CreateJobDTO(BaseModel):
         default=None,
         description='Document identifier. When omitted, a deterministic UUID is derived from the digest.',
     )
-    context: ContextSchema
+    context: JobContextPayload
     metadata: MetadataSchema | None = Field(
         default=None,
         description='Optional pre-filled metadata. Agent output may overwrite fields unless they are locked.',
@@ -44,6 +50,13 @@ class CreateJobDTO(BaseModel):
         if self.document_id is not None:
             return self.document_id
         return uuid5(METADATA_DOCUMENT_NAMESPACE, self.context.digest)
+
+    def agent_context(self, tenant_id: UUID) -> ContextSchema:
+        return ContextSchema(
+            digest=self.context.digest,
+            collection_name=self.context.collection_name,
+            tenant_id=tenant_id,
+        )
 
 
 class RebuildJobDTO(CreateJobDTO):

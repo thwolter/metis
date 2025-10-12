@@ -57,8 +57,7 @@ def create_job(session: Session, dto: CreateJobDTO, *, access_context: AccessCon
     document_id = dto.resolved_document_id()
     ingestion_fingerprint = dto.idempotency_key or dto.context.digest
     tenant_id = access_context.tenant_id
-    if dto.context.tenant_id != tenant_id:
-        raise ValueError('Payload tenant does not match authenticated tenant')
+    job_context = dto.agent_context(tenant_id)
 
     job = Job(
         tenant_id=tenant_id,
@@ -71,7 +70,7 @@ def create_job(session: Session, dto: CreateJobDTO, *, access_context: AccessCon
         idempotency_key=dto.idempotency_key,
         input_metadata=_metadata_to_dict(dto.metadata),
         locked_fields=_locked_fields(dto.metadata, dto.locked_fields),
-        context=dto.context.model_dump(mode='json'),
+        context=job_context.model_dump(mode='json'),
     )
 
     session.add(job)
