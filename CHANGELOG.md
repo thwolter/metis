@@ -1,3 +1,14 @@
+## 0.2.0 (2025-10-12)
+
+### Feat
+
+- replace `tenant_id` in job context with implicit tenant injection
+- add tenant isolation with RLS and enhance access context handling
+
+### Refactor
+
+- replace internal auth with tenant-based authorization
+
 ## 0.1.0 (2025-10-11)
 
 ### Feat
