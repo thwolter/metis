@@ -1,7 +1,7 @@
-site_name: FDE Classifier
+site_name: Metis
 site_description: Tenant-aware metadata extraction service
 site_url: ""
-repo_url: "https://github.com/thwolter/fde-classifier"
+repo_url: "https://github.com/thwolter/metis"
 docs_dir: docs
 theme:
   name: readthedocs
