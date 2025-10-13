@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Metadata API - FDE Classifier</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Metadata API";
+        var mkdocs_page_input_path = "frontend_api_spec.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> FDE Classifier
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Overview</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">API</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Metadata API</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#base-url-and-authentication">Base URL and Authentication</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#common-data-structures">Common Data Structures</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#jobcontextpayload">JobContextPayload</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#metadataschema">MetadataSchema</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#jobstatus-enum">JobStatus (enum)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#standard-error-payload">Standard Error Payload</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#endpoint-overview">Endpoint Overview</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#endpoint-details">Endpoint Details</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#post-v1metadata">POST /v1/metadata</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#post-v1documentsdocument_idrebuild">POST /v1/documents/{document_id}/rebuild</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#get-v1jobsjob_id">GET /v1/jobs/{job_id}</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#delete-v1jobsjob_id">DELETE /v1/jobs/{job_id}</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#get-v1documentsdocument_idmetadata">GET /v1/documents/{document_id}/metadata</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#put-v1documentsdocument_idmetadata">PUT /v1/documents/{document_id}/metadata</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#health-probes">Health Probes</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#additional-notes-for-frontend-integration">Additional Notes for Frontend Integration</a>
+    </li>
+    </ul>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">FDE Classifier</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">API</li>
+      <li class="breadcrumb-item active">Metadata API</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/thwolter/fde-classifier/edit/master/docs/frontend_api_spec.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="metadata-api-specification-frontend-contract">Metadata API Specification (Frontend Contract)</h1>
+<h2 id="base-url-and-authentication">Base URL and Authentication</h2>
+<ul>
+<li><strong>Service root</strong>: all versioned endpoints live under <code>/v1</code>. Combine with the environment host, for example <code>https://metadata.internal.example.com/v1</code>.</li>
+<li><strong>Authentication</strong>: every request must send <code>Authorization: Bearer &lt;jwt&gt;</code>. Tokens are decoded with <code>tenauth</code> and must contain <code>tid</code> (tenant) and <code>sub</code> (user) claims. Missing or malformed tokens return <code>401 Unauthorized</code>.</li>
+<li><strong>Content type</strong>: request and response bodies are JSON encoded using UTF-8.</li>
+</ul>
+<h2 id="common-data-structures">Common Data Structures</h2>
+<h3 id="jobcontextpayload">JobContextPayload</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>digest</code></td>
+<td>string (<code>SHA256B64</code>)</td>
+<td>Base64-encoded SHA-256 hash of the document. Used for idempotency.</td>
+</tr>
+<tr>
+<td><code>collection_name</code></td>
+<td>string</td>
+<td>Logical collection in the vector store.</td>
+</tr>
+<tr>
+<td><em>implicit tenant</em></td>
+<td>derived</td>
+<td>The backend injects the tenant from the JWT (<code>tid</code>) claim; clients must not send it.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="metadataschema">MetadataSchema</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>document_type</code></td>
+<td>string | null</td>
+<td>e.g. <code>"Annual Report"</code>.</td>
+</tr>
+<tr>
+<td><code>company_name</code></td>
+<td>string | null</td>
+<td>Primary company name.</td>
+</tr>
+<tr>
+<td><code>parent_company</code></td>
+<td>string | null</td>
+<td>Immediate parent.</td>
+</tr>
+<tr>
+<td><code>ultimate_parent_company</code></td>
+<td>string | null</td>
+<td>Top-level parent.</td>
+</tr>
+<tr>
+<td><code>reporting_date</code></td>
+<td>date | null</td>
+<td>ISO-8601 date (<code>YYYY-MM-DD</code>).</td>
+</tr>
+<tr>
+<td><code>reporting_year</code></td>
+<td>integer | null</td>
+<td>e.g. <code>2023</code>.</td>
+</tr>
+<tr>
+<td><code>call_date</code></td>
+<td>date | null</td>
+<td>When the document was received.</td>
+</tr>
+<tr>
+<td><code>company_register</code></td>
+<td>string | null</td>
+<td>Register name.</td>
+</tr>
+<tr>
+<td><code>register_number</code></td>
+<td>string | null</td>
+<td>Registration identifier.</td>
+</tr>
+<tr>
+<td><code>tags</code></td>
+<td>string[] | null</td>
+<td>Arbitrary document tags.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="jobstatus-enum">JobStatus (enum)</h3>
+<p><code>queued</code>, <code>running</code>, <code>succeeded</code>, <code>failed</code>, <code>canceled</code>.</p>
+<h3 id="standard-error-payload">Standard Error Payload</h3>
+<p>Most backend validation and lookup errors follow FastAPI’s default shape:</p>
+<pre><code class="language-json">{&quot;detail&quot;: &quot;Job not found&quot;}
+</code></pre>
+<p>Validation errors (<code>422</code>) return an array of issues under <code>detail</code>.</p>
+<h2 id="endpoint-overview">Endpoint Overview</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Summary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/v1/metadata</code></td>
+<td>Create (or reuse) a metadata extraction job.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/v1/documents/{document_id}/rebuild</code></td>
+<td>Rebuild metadata for an existing document.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/v1/jobs/{job_id}</code></td>
+<td>Retrieve job status (and result link when ready).</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/v1/jobs/{job_id}</code></td>
+<td>Request job cancellation.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/v1/documents/{document_id}/metadata</code></td>
+<td>Fetch versioned metadata for a document.</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/v1/documents/{document_id}/metadata</code></td>
+<td>Manually upsert metadata (bypasses agent).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/healthz</code>, <code>/readyz</code></td>
+<td>Liveness and readiness probes (unauthenticated).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="endpoint-details">Endpoint Details</h2>
+<h3 id="post-v1metadata">POST <code>/v1/metadata</code></h3>
+<p>Create a metadata extraction job. Jobs are idempotent per <code>(tenant_id, document_id, profile, ingestion_fingerprint)</code>.</p>
+<p><strong>Query string</strong>
+| Name | Type | Default | Notes |
+| --- | --- | --- | --- |
+| <code>wait_for_secs</code> | integer | <code>0</code> | Optional polling window (0–30). The API blocks up to this many seconds, returning <code>result_url</code> immediately if the job succeeds within the window. |</p>
+<p><strong>Request body</strong>
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| <code>document_id</code> | UUID | null | optional | If omitted, the backend derives an ID from <code>context.digest</code>. |
+| <code>context</code> | JobContextPayload | yes | Backend augments this payload with the tenant from the JWT (<code>tid</code>). |
+| <code>metadata</code> | MetadataSchema | null | optional | Seed values. Agent output may overwrite unlocked fields. |
+| <code>locked_fields</code> | string[] | null | optional | Fields that must remain unchanged even if the agent proposes values. Empty list or omission allows full overwrite. |
+| <code>profile</code> | string | yes (default <code>"default"</code>) | Selects the agent strategy. |
+| <code>priority</code> | integer (0–10) | null | optional (default <code>5</code>) | Lower numbers process sooner. |
+| <code>callback_url</code> | URL | null | optional | Invoked after success. |
+| <code>idempotency_key</code> | string (≤128) | null | optional | Overrides default fingerprint (<code>context.digest</code>). Enables client-managed idempotency. |</p>
+<p><strong>Success response</strong>
+- <code>202 Accepted</code> with <code>JobCreatedResponse</code>:</p>
+<pre><code class="language-json">{
+  &quot;job_id&quot;: &quot;4f3c6857-0405-454a-9695-b868aee81af7&quot;,
+  &quot;document_id&quot;: &quot;be9f6304-5ea1-4690-843b-7192617b61d4&quot;,
+  &quot;status_url&quot;: &quot;https://metadata.internal.example.com/v1/jobs/4f3c6857-0405-454a-9695-b868aee81af7&quot;,
+  &quot;result_url&quot;: &quot;https://metadata.internal.example.com/v1/documents/be9f6304-5ea1-4690-843b-7192617b61d4/metadata?version=latest&quot;
+}
+</code></pre>
+<p>Note: <code>result_url</code> is present only if the job finishes successfully during the wait window.</p>
+<p><strong>Error responses</strong>
+- <code>401 Unauthorized</code> when the Bearer token is missing or invalid.
+- <code>422 Unprocessable Entity</code> for validation errors (e.g., malformed UUIDs or dates).</p>
+<h3 id="post-v1documentsdocument_idrebuild">POST <code>/v1/documents/{document_id}/rebuild</code></h3>
+<p>Kick off a rebuild job for an existing document. Body accepts the same payload as <code>CreateJobDTO</code>; the <code>document_id</code> path parameter overrides any value supplied in the body.</p>
+<p><strong>Success response</strong>
+- <code>202 Accepted</code> with <code>JobCreatedResponse</code> (same shape as above, <code>result_url</code> omitted until completion).</p>
+<p><strong>Error responses</strong>
+- <code>401 Unauthorized</code>
+- <code>422 Unprocessable Entity</code></p>
+<h3 id="get-v1jobsjob_id">GET <code>/v1/jobs/{job_id}</code></h3>
+<p>Return job status and progress metadata.</p>
+<p><strong>Success response</strong>
+- <code>200 OK</code> with <code>JobStatusResponse</code>:</p>
+<pre><code class="language-json">{
+  &quot;job_id&quot;: &quot;4f3c6857-0405-454a-9695-b868aee81af7&quot;,
+  &quot;document_id&quot;: &quot;be9f6304-5ea1-4690-843b-7192617b61d4&quot;,
+  &quot;tenant_id&quot;: &quot;b46a635d-aead-4bc9-9051-01ede4cbb2de&quot;,
+  &quot;status&quot;: &quot;running&quot;,
+  &quot;retries&quot;: 0,
+  &quot;priority&quot;: 5,
+  &quot;created_at&quot;: &quot;2024-01-16T09:53:10.517Z&quot;,
+  &quot;started_at&quot;: &quot;2024-01-16T09:53:11.012Z&quot;,
+  &quot;finished_at&quot;: null,
+  &quot;error_type&quot;: null,
+  &quot;error_msg&quot;: null,
+  &quot;result_url&quot;: null
+}
+</code></pre>
+<ul>
+<li>When <code>status</code> is <code>succeeded</code>, <code>result_url</code> points to the latest metadata version.</li>
+</ul>
+<p><strong>Error responses</strong>
+- <code>401 Unauthorized</code>
+- <code>404 Not Found</code> when the job ID is unknown.</p>
+<h3 id="delete-v1jobsjob_id">DELETE <code>/v1/jobs/{job_id}</code></h3>
+<p>Request cancellation of an in-flight job. Completed jobs return their existing status without changes.</p>
+<p><strong>Success response</strong>
+- <code>202 Accepted</code> with <code>JobCancelResponse</code>:</p>
+<pre><code class="language-json">{&quot;job_id&quot;: &quot;4f3c6857-0405-454a-9695-b868aee81af7&quot;, &quot;status&quot;: &quot;canceled&quot;}
+</code></pre>
+<p><strong>Error responses</strong>
+- <code>401 Unauthorized</code>
+- <code>404 Not Found</code></p>
+<h3 id="get-v1documentsdocument_idmetadata">GET <code>/v1/documents/{document_id}/metadata</code></h3>
+<p>Fetch a specific or latest metadata version.</p>
+<p><strong>Query string</strong>
+| Name | Type | Default | Notes |
+| --- | --- | --- | --- |
+| <code>version</code> | string | null | <code>"latest"</code> | Supports <code>"latest"</code> or explicit versions like <code>"v3"</code> / <code>"3"</code>. |</p>
+<p><strong>Success response</strong>
+- <code>200 OK</code> with <code>MetadataVersionResponse</code>:</p>
+<pre><code class="language-json">{
+  &quot;document_id&quot;: &quot;be9f6304-5ea1-4690-843b-7192617b61d4&quot;,
+  &quot;version&quot;: 3,
+  &quot;fingerprint&quot;: &quot;b407f6955d4f5ef1f6798cbae6e17c1ea401f83d4580598d77077d4a2ee2167a&quot;,
+  &quot;extracted_on&quot;: &quot;2024-01-16T09:55:03.144Z&quot;,
+  &quot;metadata&quot;: {
+    &quot;document_type&quot;: &quot;Annual Report&quot;,
+    &quot;company_name&quot;: &quot;Acme Corp&quot;,
+    &quot;parent_company&quot;: null,
+    &quot;ultimate_parent_company&quot;: null,
+    &quot;reporting_date&quot;: &quot;2023-12-31&quot;,
+    &quot;reporting_year&quot;: 2023,
+    &quot;call_date&quot;: null,
+    &quot;company_register&quot;: &quot;Delaware&quot;,
+    &quot;register_number&quot;: &quot;1234567&quot;,
+    &quot;tags&quot;: [&quot;finance&quot;, &quot;annual&quot;]
+  }
+}
+</code></pre>
+<p><strong>Error responses</strong>
+- <code>401 Unauthorized</code>
+- <code>404 Not Found</code> when no matching document/version exists.
+- <code>422 Unprocessable Entity</code> when <code>version</code> does not match the regex <code>latest</code> or <code>v&lt;number&gt;</code>.</p>
+<h3 id="put-v1documentsdocument_idmetadata">PUT <code>/v1/documents/{document_id}/metadata</code></h3>
+<p>Persist a manual metadata version without running the extraction agent. The backend increments the version counter unless the incoming payload matches the latest fingerprint exactly.</p>
+<p><strong>Request body</strong></p>
+<pre><code class="language-json">{
+  &quot;metadata&quot;: {
+    &quot;...&quot;: &quot;See MetadataSchema above&quot;
+  }
+}
+</code></pre>
+<p><strong>Success response</strong>
+- <code>200 OK</code> with <code>MetadataVersionResponse</code> (same shape as the GET response).</p>
+<p><strong>Error responses</strong>
+- <code>401 Unauthorized</code>
+- <code>422 Unprocessable Entity</code></p>
+<h2 id="health-probes">Health Probes</h2>
+<ul>
+<li><code>GET /healthz</code> → <code>{"status": "ok"}</code></li>
+<li><code>GET /readyz</code> → <code>{"status": "ready"}</code></li>
+</ul>
+<p>These endpoints are unauthenticated and intended for platform monitoring.</p>
+<h2 id="additional-notes-for-frontend-integration">Additional Notes for Frontend Integration</h2>
+<ul>
+<li>Prefer using the URLs returned by <code>status_url</code> and <code>result_url</code> rather than reconstructing paths manually; they already include the correct host and versioning.</li>
+<li>Jobs are processed asynchronously. Poll <code>/v1/jobs/{job_id}</code> until <code>status</code> transitions to a terminal state (<code>succeeded</code>, <code>failed</code>, or <code>canceled</code>). A <code>result_url</code> is only meaningful once the job succeeds.</li>
+<li>When supplying <code>metadata.locked_fields</code>, ensure the array contains metadata keys exactly as defined in <code>MetadataSchema</code>.</li>
+<li>The backend emits callbacks (POST requests) to <code>callback_url</code> only on success; the callback payload mirrors <code>MetadataVersionResponse</code>.</li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href=".." class="btn btn-neutral float-left" title="Overview"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/thwolter/fde-classifier" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href=".." style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
