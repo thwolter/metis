@@ -81,6 +81,18 @@ def upgrade() -> None:
         schema='metadata',
     )
 
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'metadata_rw') THEN
+                CREATE ROLE metadata_rw NOLOGIN;
+            END IF;
+        END
+        $$;
+        """
+    )
+
     op.execute('GRANT USAGE ON SCHEMA metadata TO metadata_rw;')
     op.execute('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA metadata TO metadata_rw;')
     op.execute(
