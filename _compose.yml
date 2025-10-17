@@ -1,0 +1,74 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./docker/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    healthcheck:
+      test: [ "CMD", "/otelcol", "validate", "--config=/etc/otelcol/config.yaml" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    ports:
+      - "4318:4318"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - redispassword
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'redispassword', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+  metis-db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metis
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d metis']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./docker/010_bootstrap.sql:/docker-entrypoint-initdb.d/010_bootstrap.sql:ro
+      - metis-db-data:/var/lib/postgresql/data
+
+
+  app:
+    build:
+      context: ./
+    depends_on:
+      redis:
+        condition: service_healthy
+      metis-db:
+        condition: service_healthy
+    environment:
+      POSTGRES_URL: postgresql://metis_user:metis-db-password@metis-db:5432/metis
+      ALEMBIC_DATABASE_URL: postgresql://postgres:postgres@metis-db:5432/metis
+      REDIS_URL: redis://:redispassword@redis:6379/1
+      OPENAI_API_KEY: sk-your-openai-key
+      TAVILY_API_KEY: tvly-your-tavily-key
+      INTERNAL_AUTH_TOKEN: dev-internal-token
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: INFO
+    ports:
+      - '8001:8000'
+
+volumes:
+  redis-data:
+  metis-db-data:

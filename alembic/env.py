@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from dotenv import dotenv_values
-from sqlalchemy import engine_from_config, pool, text
+from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from alembic import context
@@ -52,8 +52,6 @@ def run_migrations_online() -> None:
     connectable = engine_from_config(section, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        # Ensure the metadata schema exists; make it idempotent and commit the DDL so it isn't rolled back
-        connection.execute(text('CREATE SCHEMA IF NOT EXISTS "metadata"'))
         connection.commit()
         context.configure(
             connection=connection,

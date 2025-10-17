@@ -14,8 +14,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute('CREATE SCHEMA IF NOT EXISTS metadata;')
-
     op.create_table(
         'metadata_jobs',
         sa.Column('job_id', postgresql.UUID(as_uuid=True), primary_key=True),
@@ -79,24 +77,6 @@ def upgrade() -> None:
         ['tenant_id', 'document_id', 'version'],
         unique=True,
         schema='metadata',
-    )
-
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'metadata_rw') THEN
-                CREATE ROLE metadata_rw NOLOGIN;
-            END IF;
-        END
-        $$;
-        """
-    )
-
-    op.execute('GRANT USAGE ON SCHEMA metadata TO metadata_rw;')
-    op.execute('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA metadata TO metadata_rw;')
-    op.execute(
-        'ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO metadata_rw;'
     )
 
     op.execute('ALTER TABLE metadata.metadata_jobs ENABLE ROW LEVEL SECURITY;')
