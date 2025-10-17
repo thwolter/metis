@@ -57,8 +57,8 @@ services:
       metis-db:
         condition: service_healthy
     environment:
-      POSTGRES_URL: postgresql://app_user:app-user-password@metis-db:5432/metis
-      ALEMBIC_DATABASE_URL: postgresql://alembic_user:alembic-user-password@metis-db:5432/metis
+      POSTGRES_URL: postgresql://metis_app_user:app-user-password@metis-db:5432/metis
+      ALEMBIC_DATABASE_URL: postgresql://metis_alembic_user:alembic-user-password@metis-db:5432/metis
       REDIS_URL: redis://:redispassword@redis:6379/1
       OPENAI_API_KEY: sk-your-openai-key
       TAVILY_API_KEY: tvly-your-tavily-key

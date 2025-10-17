@@ -17,17 +17,17 @@ END$$;
 -- Create runtime and migration users
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-    CREATE ROLE app_user LOGIN PASSWORD 'app-user-password';
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'metis_app_user') THEN
+    CREATE ROLE metis_app_user LOGIN PASSWORD 'app-user-password';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'alembic_user') THEN
-    CREATE ROLE alembic_user LOGIN PASSWORD 'alembic-user-password';
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'metis_alembic_user') THEN
+    CREATE ROLE metis_alembic_user LOGIN PASSWORD 'alembic-user-password';
   END IF;
 END$$;
 
 -- Memberships
-GRANT metadata_rw TO app_user;
-GRANT ddl_owner TO alembic_user;
+GRANT metadata_rw TO metis_app_user;
+GRANT ddl_owner TO metis_alembic_user;
 
 -- Dedicated schema owned by ddl_owner
 CREATE SCHEMA IF NOT EXISTS metadata AUTHORIZATION ddl_owner;
