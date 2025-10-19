@@ -22,7 +22,8 @@ COPY pyproject.toml uv.lock* ./
 COPY src ./src
 
 # Pre-build wheels so the final stage can install quickly from cache.
-RUN pip wheel --no-deps --wheel-dir /tmp/wheels "uvicorn[standard]>=0.34.0" \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip wheel --no-deps --wheel-dir /tmp/wheels "uvicorn[standard]>=0.34.0" \
     && pip wheel --no-deps --wheel-dir /tmp/wheels .
 
 
