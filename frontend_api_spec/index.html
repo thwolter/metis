@@ -856,21 +856,86 @@
 <h2 id="endpoint-details">Endpoint Details</h2>
 <h3 id="post-v1metadata">POST <code>/v1/metadata</code></h3>
 <p>Create a metadata extraction job. Jobs are idempotent per <code>(tenant_id, document_id, profile, ingestion_fingerprint)</code>.</p>
-<p><strong>Query string</strong>
-| Name | Type | Default | Notes |
-| --- | --- | --- | --- |
-| <code>wait_for_secs</code> | integer | <code>0</code> | Optional polling window (0–30). The API blocks up to this many seconds, returning <code>result_url</code> immediately if the job succeeds within the window. |</p>
-<p><strong>Request body</strong>
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| <code>document_id</code> | UUID | null | optional | If omitted, the backend derives an ID from <code>context.digest</code>. |
-| <code>context</code> | JobContextPayload | yes | Backend augments this payload with the tenant from the JWT (<code>tid</code>). |
-| <code>metadata</code> | MetadataSchema | null | optional | Seed values. Agent output may overwrite unlocked fields. |
-| <code>locked_fields</code> | string[] | null | optional | Fields that must remain unchanged even if the agent proposes values. Empty list or omission allows full overwrite. |
-| <code>profile</code> | string | yes (default <code>"default"</code>) | Selects the agent strategy. |
-| <code>priority</code> | integer (0–10) | null | optional (default <code>5</code>) | Lower numbers process sooner. |
-| <code>callback_url</code> | URL | null | optional | Invoked after success. |
-| <code>idempotency_key</code> | string (≤128) | null | optional | Overrides default fingerprint (<code>context.digest</code>). Enables client-managed idempotency. |</p>
+<p><strong>Query string</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wait_for_secs</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>Optional polling window (0–30). The API blocks up to this many seconds, returning <code>result_url</code> immediately if the job succeeds within the window.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Request body</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>document_id</code></td>
+<td>UUID | null</td>
+<td>optional</td>
+<td>If omitted, the backend derives an ID from <code>context.digest</code>.</td>
+</tr>
+<tr>
+<td><code>context</code></td>
+<td>JobContextPayload</td>
+<td>yes</td>
+<td>Backend augments this payload with the tenant from the JWT (<code>tid</code>).</td>
+</tr>
+<tr>
+<td><code>metadata</code></td>
+<td>MetadataSchema | null</td>
+<td>optional</td>
+<td>Seed values. Agent output may overwrite unlocked fields.</td>
+</tr>
+<tr>
+<td><code>locked_fields</code></td>
+<td>string[] | null</td>
+<td>optional</td>
+<td>Fields that must remain unchanged even if the agent proposes values. Empty list or omission allows full overwrite.</td>
+</tr>
+<tr>
+<td><code>profile</code></td>
+<td>string</td>
+<td>yes (default <code>"default"</code>)</td>
+<td>Selects the agent strategy.</td>
+</tr>
+<tr>
+<td><code>priority</code></td>
+<td>integer (0–10) | null</td>
+<td>optional (default <code>5</code>)</td>
+<td>Lower numbers process sooner.</td>
+</tr>
+<tr>
+<td><code>callback_url</code></td>
+<td>URL | null</td>
+<td>optional</td>
+<td>Invoked after success.</td>
+</tr>
+<tr>
+<td><code>idempotency_key</code></td>
+<td>string (≤128) | null</td>
+<td>optional</td>
+<td>Overrides default fingerprint (<code>context.digest</code>). Enables client-managed idempotency.</td>
+</tr>
+</tbody>
+</table>
 <p><strong>Success response</strong>
 - <code>202 Accepted</code> with <code>JobCreatedResponse</code>:</p>
 <pre><code class="language-json">{
@@ -927,10 +992,25 @@
 - <code>404 Not Found</code></p>
 <h3 id="get-v1documentsdocument_idmetadata">GET <code>/v1/documents/{document_id}/metadata</code></h3>
 <p>Fetch a specific or latest metadata version.</p>
-<p><strong>Query string</strong>
-| Name | Type | Default | Notes |
-| --- | --- | --- | --- |
-| <code>version</code> | string | null | <code>"latest"</code> | Supports <code>"latest"</code> or explicit versions like <code>"v3"</code> / <code>"3"</code>. |</p>
+<p><strong>Query string</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>version</code></td>
+<td>string | null</td>
+<td><code>"latest"</code></td>
+<td>Supports <code>"latest"</code> or explicit versions like <code>"v3"</code> / <code>"3"</code>.</td>
+</tr>
+</tbody>
+</table>
 <p><strong>Success response</strong>
 - <code>200 OK</code> with <code>MetadataVersionResponse</code>:</p>
 <pre><code class="language-json">{
