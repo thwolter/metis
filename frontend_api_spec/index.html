@@ -706,7 +706,7 @@
 <h2 id="base-url-and-authentication">Base URL and Authentication</h2>
 <ul>
 <li><strong>Service root</strong>: all versioned endpoints live under <code>/v1</code>. Combine with the environment host, for example <code>https://metadata.internal.example.com/v1</code>.</li>
-<li><strong>Authentication</strong>: every request must send <code>Authorization: Bearer &lt;jwt&gt;</code>. Tokens are decoded with <code>tenauth</code> and must contain <code>tid</code> (tenant) and <code>sub</code> (user) claims. Missing or malformed tokens return <code>401 Unauthorized</code>.</li>
+<li><strong>Authentication</strong>: every request must send <code>Authorization: Bearer &lt;jwt&gt;</code>. Tokens are decoded with <a href="https://thwolter.github.io/tenauth/"><code>tenauth</code></a> and must contain <code>tid</code> (tenant) and <code>sub</code> (user) claims. The package is published on <a href="https://pypi.org/project/tenauth/">PyPI</a>. Missing or malformed tokens return <code>401 Unauthorized</code>.</li>
 <li><strong>Content type</strong>: request and response bodies are JSON encoded using UTF-8.</li>
 </ul>
 <h2 id="common-data-structures">Common Data Structures</h2>

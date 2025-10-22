@@ -449,7 +449,7 @@ row-level security.</p>
 <h2 id="what-youll-find">What You'll Find</h2>
 <ul>
 <li><strong>Architecture Overview</strong> – how FastAPI, Dramatiq workers, and PGVector collaborate.</li>
-<li><strong>Authentication Flow</strong> – requests use <code>Authorization: Bearer &lt;jwt&gt;</code>; tenancy comes from the <code>tid</code> claim.</li>
+<li><strong>Authentication Flow</strong> – requests use <code>Authorization: Bearer &lt;jwt&gt;</code>; tenancy comes from the <code>tid</code> claim and is enforced through <a href="https://thwolter.github.io/tenauth/"><code>tenauth</code></a> (<a href="https://pypi.org/project/tenauth/">PyPI</a>).</li>
 <li><strong>Metadata API Reference</strong> – detailed request/response schema for all <code>/v1</code> endpoints.</li>
 </ul>
 <h2 id="getting-started">Getting Started</h2>
