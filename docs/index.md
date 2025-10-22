@@ -7,7 +7,7 @@ row-level security.
 ## What You'll Find
 
 - **Architecture Overview** – how FastAPI, Dramatiq workers, and PGVector collaborate.
-- **Authentication Flow** – requests use `Authorization: Bearer <jwt>`; tenancy comes from the `tid` claim.
+- **Authentication Flow** – requests use `Authorization: Bearer <jwt>`; tenancy comes from the `tid` claim and is enforced through [`tenauth`](https://thwolter.github.io/tenauth/) ([PyPI](https://pypi.org/project/tenauth/)).
 - **Metadata API Reference** – detailed request/response schema for all `/v1` endpoints.
 
 ## Getting Started

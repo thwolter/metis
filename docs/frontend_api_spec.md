@@ -2,12 +2,13 @@
 
 ## Base URL and Authentication
 - **Service root**: all versioned endpoints live under `/v1`. Combine with the environment host, for example `https://metadata.internal.example.com/v1`.
-- **Authentication**: every request must send `Authorization: Bearer <jwt>`. Tokens are decoded with `tenauth` and must contain `tid` (tenant) and `sub` (user) claims. Missing or malformed tokens return `401 Unauthorized`.
+- **Authentication**: every request must send `Authorization: Bearer <jwt>`. Tokens are decoded with [`tenauth`](https://thwolter.github.io/tenauth/) and must contain `tid` (tenant) and `sub` (user) claims. The package is published on [PyPI](https://pypi.org/project/tenauth/). Missing or malformed tokens return `401 Unauthorized`.
 - **Content type**: request and response bodies are JSON encoded using UTF-8.
 
 ## Common Data Structures
 
 ### JobContextPayload
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | `digest` | string (`SHA256B64`) | Base64-encoded SHA-256 hash of the document. Used for idempotency. |
@@ -15,6 +16,7 @@
 | _implicit tenant_ | derived | The backend injects the tenant from the JWT (`tid`) claim; clients must not send it. |
 
 ### MetadataSchema
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | `document_type` | string \| null | e.g. `"Annual Report"`. |
@@ -41,6 +43,7 @@ Most backend validation and lookup errors follow FastAPI’s default shape:
 Validation errors (`422`) return an array of issues under `detail`.
 
 ## Endpoint Overview
+
 | Method | Path | Summary |
 | --- | --- | --- |
 | POST | `/v1/metadata` | Create (or reuse) a metadata extraction job. |
@@ -57,11 +60,13 @@ Validation errors (`422`) return an array of issues under `detail`.
 Create a metadata extraction job. Jobs are idempotent per `(tenant_id, document_id, profile, ingestion_fingerprint)`.
 
 **Query string**
+
 | Name | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `wait_for_secs` | integer | `0` | Optional polling window (0–30). The API blocks up to this many seconds, returning `result_url` immediately if the job succeeds within the window. |
 
 **Request body**
+
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `document_id` | UUID \| null | optional | If omitted, the backend derives an ID from `context.digest`. |
@@ -148,6 +153,7 @@ Request cancellation of an in-flight job. Completed jobs return their existing s
 Fetch a specific or latest metadata version.
 
 **Query string**
+
 | Name | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `version` | string \| null | `"latest"` | Supports `"latest"` or explicit versions like `"v3"` / `"3"`. |
