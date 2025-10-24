@@ -68,6 +68,21 @@ services:
       LOG_LEVEL: INFO
     ports:
       - '8001:8000'
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./alembic
+          target: /app/alembic
+        - action: sync
+          path: ./scripts
+          target: /app/scripts
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
 
 volumes:
   redis-data:

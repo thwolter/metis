@@ -44,6 +44,23 @@ ALTER DEFAULT PRIVILEGES FOR ROLE metis_alembic_user IN SCHEMA metadata
 ALTER DEFAULT PRIVILEGES FOR ROLE metis_alembic_user IN SCHEMA metadata
   GRANT EXECUTE ON FUNCTIONS TO metadata_rw, metadata_ro;
 
+-- Ensure role connections default to the metadata schema
+DO $$
+DECLARE
+  db_name text := current_database();
+BEGIN
+  EXECUTE format(
+    'ALTER ROLE %I IN DATABASE %I SET search_path = metadata, public',
+    'metis_app_user',
+    db_name
+  );
+  EXECUTE format(
+    'ALTER ROLE %I IN DATABASE %I SET search_path = metadata, public',
+    'metis_alembic_user',
+    db_name
+  );
+END$$;
+
 -- Optional: enable pgcrypto for gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 

@@ -91,6 +91,8 @@ def test_create_job_defaults_to_no_locked_fields(engine):
         job = create_job(session, dto, access_context=access)
 
     assert job.locked_fields == []
+    assert job.collection_name == dto.context.collection_name
+    assert job.document_digest == dto.context.digest
 
 
 def test_metadata_fingerprint_idempotent():

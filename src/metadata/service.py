@@ -8,12 +8,14 @@ from hashlib import sha256
 from typing import Sequence
 from uuid import UUID
 
+from psycopg2 import sql
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from tenauth.schemas import AccessContext
 
 from agent.schemas import ContextSchema, MetadataSchema
+from core.config import get_settings
 from core.logging import configure_logging
 from metadata.models import DocumentMetadata, Job, JobStatus
 from metadata.schemas import CreateJobDTO
@@ -22,6 +24,7 @@ from utils.vstore import get_collection_uuid, pg_connect
 configure_logging()
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def _fingerprint_from_payload(payload: dict) -> str:
@@ -57,7 +60,6 @@ def create_job(session: Session, dto: CreateJobDTO, *, access_context: AccessCon
     document_id = dto.resolved_document_id()
     ingestion_fingerprint = dto.idempotency_key or dto.context.digest
     tenant_id = access_context.tenant_id
-    job_context = dto.agent_context(tenant_id)
 
     job = Job(
         tenant_id=tenant_id,
@@ -70,7 +72,8 @@ def create_job(session: Session, dto: CreateJobDTO, *, access_context: AccessCon
         idempotency_key=dto.idempotency_key,
         input_metadata=_metadata_to_dict(dto.metadata),
         locked_fields=_locked_fields(dto.metadata, dto.locked_fields),
-        context=job_context.model_dump(mode='json'),
+        document_digest=dto.context.digest,
+        collection_name=dto.context.collection_name,
     )
 
     session.add(job)
@@ -256,14 +259,16 @@ def update_vecstore_metadata(context: ContextSchema, document_id: UUID, metadata
             collection_uuid = get_collection_uuid(conn, context.collection_name)
             with conn.cursor() as cur:
                 cur.execute(
-                    """
-                    UPDATE langchain_pg_embedding
-                    SET cmetadata = COALESCE(cmetadata, '{}'::jsonb) || %s::jsonb
-                    WHERE collection_id = %s::uuid
-                      AND cmetadata ->> 'digest' = %s
-                    """,
+                    sql.SQL(
+                        """
+                        UPDATE {}.langchain_pg_embedding
+                        SET cmetadata = COALESCE(cmetadata, '{{}}'::jsonb) || %s::jsonb
+                        WHERE collection_id = %s::uuid
+                          AND cmetadata ->> 'digest' = %s
+                        """
+                    ).format(sql.Identifier(settings.pg_vector_schema)),
                     (meta_payload, str(collection_uuid), context.digest),
                 )
             conn.commit()
-    except Exception:  # noqa: BLE001 - best-effort update, log only
-        logger.exception('Failed updating vecstore metadata for document %s', document_id)
+    except Exception as e:  # noqa: BLE001 - best-effort update, log only
+        logger.exception(f'Failed updating vecstore metadata for document {document_id}: {str(e)}')

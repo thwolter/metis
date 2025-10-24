@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import ConfigDict
-from sqlalchemy import JSON, Column, Index, UniqueConstraint
+from sqlalchemy import JSON, Column, Index, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -56,10 +56,13 @@ class Job(BaseSQLModel, table=True):
     processing_fingerprint: str | None = None
     callback_url: str | None = None
     idempotency_key: str | None = None
-    context: dict[str, Any] = Field(
-        default_factory=dict,
-        sa_column=Column(JSON, nullable=False),
-        description='Context payload required by the agent.',
+    document_digest: str = Field(
+        sa_column=Column(String(128), nullable=False),
+        description='SHA256 digest for the source document.',
+    )
+    collection_name: str = Field(
+        sa_column=Column(String(255), nullable=False),
+        description='Vector store collection associated with the job.',
     )
     input_metadata: dict[str, Any] | None = Field(
         default=None,

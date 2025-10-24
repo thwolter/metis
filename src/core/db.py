@@ -26,11 +26,11 @@ def _apply_access_context(session: Session, access_context: AccessContext) -> No
     bind = session.get_bind()
     if bind is not None and bind.dialect.name.startswith('postgresql'):
         session.execute(
-            text("SELECT set_config('app.tenant_id', :value, false)"),
+            text('SET SESSION app.tenant_id = :value'),
             {'value': str(access_context.tenant_id)},
         )
         session.execute(
-            text("SELECT set_config('app.user_id', :value, false)"),
+            text('SET SESSION app.user_id = :value'),
             {'value': str(access_context.user_id)},
         )
 

@@ -49,7 +49,11 @@ def _load_job(
         session.add(job)
         session.flush()
         snapshot = JobSnapshot(job_id=job.job_id, document_id=job.document_id)
-        context = ContextSchema.model_validate(job.context)
+        context = ContextSchema(
+            digest=job.document_digest,
+            collection_name=job.collection_name,
+            tenant_id=job.tenant_id,
+        )
         base_metadata = (
             MetadataSchema.model_validate(job.input_metadata)
             if isinstance(job.input_metadata, dict) and job.input_metadata

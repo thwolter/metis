@@ -27,15 +27,23 @@ def upgrade() -> None:
         sa.Column('retries', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('error_type', sa.Text(), nullable=True),
         sa.Column('error_msg', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.TIMESTAMP(timezone=False), nullable=False),
-        sa.Column('started_at', sa.TIMESTAMP(timezone=False), nullable=True),
-        sa.Column('finished_at', sa.TIMESTAMP(timezone=False), nullable=True),
+        sa.Column(
+            'created_at', sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")
+        ),
+        sa.Column('started_at', sa.TIMESTAMP(timezone=True), nullable=True),
+        sa.Column('finished_at', sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column('processing_fingerprint', sa.Text(), nullable=True),
         sa.Column('callback_url', sa.Text(), nullable=True),
         sa.Column('idempotency_key', sa.Text(), nullable=True),
-        sa.Column('context', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column('document_digest', sa.String(length=128), nullable=False),
+        sa.Column('collection_name', sa.String(length=255), nullable=False),
         sa.Column('input_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('locked_fields', postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default='[]'),
+        sa.Column(
+            'locked_fields',
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+        ),
         sa.UniqueConstraint(
             'tenant_id',
             'document_id',
@@ -65,7 +73,12 @@ def upgrade() -> None:
         sa.Column('document_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('version', sa.Integer(), nullable=False),
         sa.Column('fingerprint', sa.Text(), nullable=False),
-        sa.Column('extracted_on', sa.TIMESTAMP(timezone=False), nullable=False),
+        sa.Column(
+            'extracted_on',
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
+            server_default=sa.text("timezone('utc', now())"),
+        ),
         sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.PrimaryKeyConstraint('tenant_id', 'document_id', 'version'),
         schema='metadata',
@@ -85,8 +98,8 @@ def upgrade() -> None:
         """
         CREATE POLICY metadata_jobs_tenant_policy
         ON metadata.metadata_jobs
-        USING (tenant_id = current_setting('app.tenant_id', false)::uuid)
-        WITH CHECK (tenant_id = current_setting('app.tenant_id', false)::uuid)
+        USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+        WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid)
         """
     )
 
@@ -96,8 +109,8 @@ def upgrade() -> None:
         """
         CREATE POLICY document_metadata_tenant_policy
         ON metadata.document_metadata
-        USING (tenant_id = current_setting('app.tenant_id', false)::uuid)
-        WITH CHECK (tenant_id = current_setting('app.tenant_id', false)::uuid)
+        USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+        WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid)
         """
     )
 

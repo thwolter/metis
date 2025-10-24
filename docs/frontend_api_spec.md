@@ -78,6 +78,9 @@ Create a metadata extraction job. Jobs are idempotent per `(tenant_id, document_
 | `callback_url` | URL \| null | optional | Invoked after success. |
 | `idempotency_key` | string (≤128) \| null | optional | Overrides default fingerprint (`context.digest`). Enables client-managed idempotency. |
 
+The service persists the context digest and collection alongside the job record (no JSON blob)
+so workers can rehydrate the agent context deterministically.
+
 **Success response**
 - `202 Accepted` with `JobCreatedResponse`:
 

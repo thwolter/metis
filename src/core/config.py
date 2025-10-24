@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     otel_traces_enabled: bool = True
     otel_metrics_enabled: bool = True
     jwt_secret: SecretStr = SecretStr('dev-internal-token')
+    pg_vector_schema: str = 'vectra'
 
     @property
     def pg_vector_url(self) -> SecretStr:
