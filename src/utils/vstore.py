@@ -3,6 +3,7 @@ from uuid import UUID
 import psycopg2
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
+from psycopg2 import sql
 from tenauth.tenancy import dsn_with_tenant
 
 from core.config import get_settings
@@ -29,11 +30,13 @@ def pg_connect(tenant_id: UUID):
 def get_collection_uuid(conn, collection_name: str) -> str:
     with conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT uuid
-            FROM langchain_pg_collection
-            WHERE name = %s
-            """,
+            sql.SQL(
+                """
+                SELECT uuid
+                FROM {}.langchain_pg_collection
+                WHERE name = %s
+                """
+            ).format(sql.Identifier(settings.pg_vector_schema)),
             (collection_name,),
         )
         row = cur.fetchone()
