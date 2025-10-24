@@ -1,0 +1,5 @@
+from tenauth.fastapi import build_access_scoped_session_dependency
+
+from core.db import session_factory
+
+SessionDep = build_access_scoped_session_dependency(session_factory=session_factory)

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+import asyncio
+from collections.abc import AsyncIterator, Generator
+from contextlib import asynccontextmanager
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.engine import Engine
+from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
 from tenauth.schemas import AccessContext
 
 from agent.schemas import MetadataSchema
@@ -28,27 +34,81 @@ def configure_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def engine():
+def engine() -> Generator[Engine, None, None]:
     original_job_schema = Job.__table__.schema  # type: ignore[missing-attribute]
     original_doc_schema = DocumentMetadata.__table__.schema  # type: ignore[missing-attribute]
     Job.__table__.schema = None  # type: ignore[missing-attribute]
     DocumentMetadata.__table__.schema = None  # type: ignore[missing-attribute]
 
-    engine = create_engine('sqlite:///:memory:', connect_args={'check_same_thread': False})
+    engine = create_engine(
+        'sqlite:///:memory:',
+        connect_args={'check_same_thread': False},
+        poolclass=StaticPool,
+    )
+
     SQLModel.metadata.create_all(engine)
 
     yield engine
 
     SQLModel.metadata.drop_all(engine)
+    engine.dispose()
     Job.__table__.schema = original_job_schema  # type: ignore[missing-attribute]
     DocumentMetadata.__table__.schema = original_doc_schema  # type: ignore[missing-attribute]
 
 
-@contextmanager
-def session_ctx(engine):
-    with Session(engine) as session:
-        yield session
-        session.commit()
+class AsyncSessionWrapper:
+    def __init__(self, session: Session):
+        self._session = session
+
+    def add(self, *args, **kwargs):
+        return self._session.add(*args, **kwargs)
+
+    async def commit(self):
+        return await asyncio.to_thread(self._session.commit)
+
+    async def refresh(self, instance):
+        return await asyncio.to_thread(self._session.refresh, instance)
+
+    async def rollback(self):
+        return await asyncio.to_thread(self._session.rollback)
+
+    async def close(self):
+        return await asyncio.to_thread(self._session.close)
+
+    async def exec(self, statement):
+        return await asyncio.to_thread(self._session.exec, statement)
+
+    def expunge(self, instance):
+        return self._session.expunge(instance)
+
+    async def get(self, model, ident):
+        return await asyncio.to_thread(self._session.get, model, ident)
+
+    async def flush(self):
+        return await asyncio.to_thread(self._session.flush)
+
+    @property
+    def info(self):
+        return self._session.info
+
+    def __getattr__(self, item):
+        return getattr(self._session, item)
+
+
+@asynccontextmanager
+async def session_ctx(engine: Engine) -> AsyncIterator[AsyncSession]:
+    with Session(engine, expire_on_commit=False) as sync_session:
+        session = AsyncSessionWrapper(sync_session)
+        exc: Exception | None = None
+        try:
+            yield cast(AsyncSession, session)
+        except Exception as err:
+            exc = err
+            await session.rollback()
+            raise
+        finally:
+            if exc is None:
+                await session.commit()
 
 
 def _dto(document_id: UUID | None = None) -> CreateJobDTO:
@@ -83,12 +143,13 @@ def test_merge_metadata_respects_locked_fields():
     assert merged.tags == ['finance', 'annual']
 
 
-def test_create_job_defaults_to_no_locked_fields(engine):
+@pytest.mark.asyncio
+async def test_create_job_defaults_to_no_locked_fields(engine: Engine):
     dto = _dto()
     access = _access()
 
-    with session_ctx(engine) as session:
-        job = create_job(session, dto, access_context=access)
+    async with session_ctx(engine) as session:
+        job = await create_job(session, dto, access_context=access)
 
     assert job.locked_fields == []
     assert job.collection_name == dto.context.collection_name
@@ -102,40 +163,40 @@ def test_metadata_fingerprint_idempotent():
     assert fp1 == fp2
 
 
-def test_create_job_is_idempotent(engine):
+@pytest.mark.asyncio
+async def test_create_job_is_idempotent(engine: Engine):
     dto = _dto()
     access = _access()
-    with session_ctx(engine) as session:
-        job1 = create_job(session, dto, access_context=access)
-        job2 = create_job(session, dto, access_context=access)
+    async with session_ctx(engine) as session:
+        job1 = await create_job(session, dto, access_context=access)
+        job2 = await create_job(session, dto, access_context=access)
 
     assert job1.job_id == job2.job_id
 
 
-def test_fetch_document_metadata_latest(engine):
+@pytest.mark.asyncio
+async def test_fetch_document_metadata_latest(engine: Engine):
     dto = _dto()
     access = _access()
-    with session_ctx(engine) as session:
-        job = create_job(session, dto, access_context=access)
-        record_metadata_version(
+    async with session_ctx(engine) as session:
+        job = await create_job(session, dto, access_context=access)
+        await record_metadata_version(
             session,
             tenant_id=access.tenant_id,
             document_id=job.document_id,
             metadata=dto.metadata,
         )
-        session.commit()
 
         updated = MetadataSchema(document_type='Annual Report', company_name='ACME Group', reporting_year=2024)
-        record_metadata_version(
+        await record_metadata_version(
             session,
             tenant_id=access.tenant_id,
             document_id=job.document_id,
             metadata=updated,
         )
-        session.commit()
 
-    with session_ctx(engine) as session:
-        record = fetch_document_metadata(
+    async with session_ctx(engine) as session:
+        record = await fetch_document_metadata(
             session,
             tenant_id=access.tenant_id,
             document_id=job.document_id,
@@ -147,17 +208,18 @@ def test_fetch_document_metadata_latest(engine):
     assert record.payload['company_name'] == 'ACME Group'
 
 
-def test_manual_metadata_update_creates_new_version(engine):
+@pytest.mark.asyncio
+async def test_manual_metadata_update_creates_new_version(engine: Engine):
     dto = _dto()
     manual_metadata = dto.metadata
     assert manual_metadata is not None
     access = _access()
-    with session_ctx(engine) as session:
-        job = create_job(session, dto, access_context=access)
+    async with session_ctx(engine) as session:
+        job = await create_job(session, dto, access_context=access)
         document_id = job.document_id
 
-    with session_ctx(engine) as session:
-        record = manual_metadata_update(
+    async with session_ctx(engine) as session:
+        record = await manual_metadata_update(
             session,
             tenant_id=access.tenant_id,
             document_id=document_id,
@@ -168,17 +230,18 @@ def test_manual_metadata_update_creates_new_version(engine):
     assert record.payload['company_name'] == 'ACME AG'
 
 
-def test_manual_metadata_update_increments_version_on_change(engine):
+@pytest.mark.asyncio
+async def test_manual_metadata_update_increments_version_on_change(engine: Engine):
     dto = _dto()
     base_metadata = dto.metadata
     assert base_metadata is not None
     access = _access()
-    with session_ctx(engine) as session:
-        job = create_job(session, dto, access_context=access)
+    async with session_ctx(engine) as session:
+        job = await create_job(session, dto, access_context=access)
         document_id = job.document_id
 
-    with session_ctx(engine) as session:
-        first = manual_metadata_update(
+    async with session_ctx(engine) as session:
+        first = await manual_metadata_update(
             session,
             tenant_id=access.tenant_id,
             document_id=document_id,
@@ -187,8 +250,8 @@ def test_manual_metadata_update_increments_version_on_change(engine):
 
     updated = base_metadata.model_copy(update={'company_name': 'ACME Group', 'reporting_year': 2024})
 
-    with session_ctx(engine) as session:
-        second = manual_metadata_update(
+    async with session_ctx(engine) as session:
+        second = await manual_metadata_update(
             session,
             tenant_id=access.tenant_id,
             document_id=document_id,
@@ -201,25 +264,26 @@ def test_manual_metadata_update_increments_version_on_change(engine):
     assert second.payload['reporting_year'] == 2024
 
 
-def test_manual_metadata_update_skips_duplicate_payload(engine):
+@pytest.mark.asyncio
+async def test_manual_metadata_update_skips_duplicate_payload(engine: Engine):
     dto = _dto()
     manual_metadata = dto.metadata
     assert manual_metadata is not None
     access = _access()
-    with session_ctx(engine) as session:
-        job = create_job(session, dto, access_context=access)
+    async with session_ctx(engine) as session:
+        job = await create_job(session, dto, access_context=access)
         document_id = job.document_id
 
-    with session_ctx(engine) as session:
-        first = manual_metadata_update(
+    async with session_ctx(engine) as session:
+        first = await manual_metadata_update(
             session,
             tenant_id=access.tenant_id,
             document_id=document_id,
             metadata=manual_metadata,
         )
 
-    with session_ctx(engine) as session:
-        second = manual_metadata_update(
+    async with session_ctx(engine) as session:
+        second = await manual_metadata_update(
             session,
             tenant_id=access.tenant_id,
             document_id=document_id,

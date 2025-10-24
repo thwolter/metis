@@ -1,65 +1,58 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Generator
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from sqlalchemy import text
-from sqlalchemy.engine import Engine
-from sqlmodel import Session, create_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
 from tenauth.schemas import AccessContext
+from tenauth.session import access_scoped_session_ctx
 
 from core.config import get_settings
 
-_engine: Engine | None = None
+_engine: AsyncEngine | None = None
+_sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
-def get_engine() -> Engine:
+def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
         settings = get_settings()
-        url = settings.pg_vector_url.get_secret_value()
-        _engine = create_engine(url, echo=settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
+        url = settings.postgres_url.get_secret_value()
+        _engine = create_async_engine(url, echo=settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
     return _engine
 
 
-def _apply_access_context(session: Session, access_context: AccessContext) -> None:
-    bind = session.get_bind()
-    if bind is not None and bind.dialect.name.startswith('postgresql'):
-        session.execute(
-            text('SET SESSION app.tenant_id = :value'),
-            {'value': str(access_context.tenant_id)},
-        )
-        session.execute(
-            text('SET SESSION app.user_id = :value'),
-            {'value': str(access_context.user_id)},
-        )
+@asynccontextmanager
+async def session_factory() -> AsyncIterator[AsyncSession]:
+    global _sessionmaker
 
-    session.info['tenant_id'] = access_context.tenant_id
-    session.info['user_id'] = access_context.user_id
+    if _sessionmaker is None:
+        _sessionmaker = async_sessionmaker(bind=get_engine(), class_=AsyncSession, expire_on_commit=False)
 
-
-def _reset_access_context(session: Session) -> None:
-    bind = session.get_bind()
-    if bind is not None and bind.dialect.name.startswith('postgresql'):
-        session.execute(text('RESET app.user_id'))
-        session.execute(text('RESET app.tenant_id'))
-
-    session.info.pop('tenant_id', None)
-    session.info.pop('user_id', None)
-
-
-@contextmanager
-def session_scope(access_context: AccessContext | None = None) -> Generator[Session, None, None]:
-    session = Session(get_engine())
+    session = _sessionmaker()
     try:
-        if access_context is not None:
-            _apply_access_context(session, access_context)
         yield session
-        session.commit()
     except Exception:
-        session.rollback()
+        await session.rollback()
         raise
     finally:
-        if access_context is not None:
-            _reset_access_context(session)
-        session.close()
+        await session.close()
+
+
+@asynccontextmanager
+async def scoped_session(*, access_context: AccessContext, verify: bool = True) -> AsyncIterator[AsyncSession]:
+    async with access_scoped_session_ctx(
+        session_factory=session_factory,
+        access_context=access_context,
+        verify=verify,
+    ) as session:
+        exc: Exception | None = None
+        try:
+            yield session
+        except Exception as err:
+            exc = err
+            raise
+        finally:
+            if exc is None:
+                await session.commit()

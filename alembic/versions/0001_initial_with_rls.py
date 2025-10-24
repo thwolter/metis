@@ -22,7 +22,7 @@ def upgrade() -> None:
         sa.Column('document_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('profile', sa.Text(), nullable=False),
         sa.Column('ingestion_fingerprint', sa.Text(), nullable=False),
-        sa.Column('status', sa.Text(), nullable=False, server_default='queued'),
+        sa.Column('status', sa.String(length=20), nullable=False, server_default='queued'),
         sa.Column('priority', sa.Integer(), nullable=False, server_default='5'),
         sa.Column('retries', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('error_type', sa.Text(), nullable=True),

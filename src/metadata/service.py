@@ -3,21 +3,22 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Sequence
 from uuid import UUID
 
 from psycopg2 import sql
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 from tenauth.schemas import AccessContext
 
 from agent.schemas import ContextSchema, MetadataSchema
 from core.config import get_settings
+from core.db import scoped_session
 from core.logging import configure_logging
-from metadata.models import DocumentMetadata, Job, JobStatus
+from metadata.models import DocumentMetadata, Job, JobStatus, utc_now
 from metadata.schemas import CreateJobDTO
 from utils.vstore import get_collection_uuid, pg_connect
 
@@ -44,18 +45,22 @@ def _locked_fields(metadata: MetadataSchema | None, explicit: list[str] | None) 
     return []
 
 
-def _job_lookup(session: Session, *, job: Job) -> Job:
+async def _job_lookup(job: Job, *, access_context: AccessContext) -> Job:
     stmt = select(Job).where(
         Job.tenant_id == job.tenant_id,
         Job.document_id == job.document_id,
         Job.profile == job.profile,
         Job.ingestion_fingerprint == job.ingestion_fingerprint,
     )
-    existing = session.exec(stmt).one()
+    async with scoped_session(access_context=access_context) as session:
+        result = await session.exec(stmt)
+        existing = result.first()
+    if existing is None:
+        raise LookupError('Job not found for idempotent lookup')
     return existing
 
 
-def create_job(session: Session, dto: CreateJobDTO, *, access_context: AccessContext) -> Job:
+async def create_job(session: AsyncSession, dto: CreateJobDTO, *, access_context: AccessContext) -> Job:
     """Create or return an idempotent metadata job."""
     document_id = dto.resolved_document_id()
     ingestion_fingerprint = dto.idempotency_key or dto.context.digest
@@ -78,31 +83,33 @@ def create_job(session: Session, dto: CreateJobDTO, *, access_context: AccessCon
 
     session.add(job)
     try:
-        session.commit()
-        session.refresh(job)
+        await session.commit()
+        await session.refresh(job)
         session.expunge(job)
         logger.info('Created job %s for document %s', job.job_id, job.document_id)
         return job
     except IntegrityError:
-        session.rollback()
-        existing = _job_lookup(session, job=job)
+        await session.rollback()
+        existing = await _job_lookup(job, access_context=access_context)
         logger.info('Reusing job %s for document %s', existing.job_id, existing.document_id)
-        session.expunge(existing)
         return existing
+    except Exception:
+        await session.rollback()
+        raise
 
 
-def get_job(session: Session, job_id: UUID) -> Job | None:
-    return session.get(Job, job_id)
+async def get_job(session: AsyncSession, job_id: UUID) -> Job | None:
+    return await session.get(Job, job_id)
 
 
-def cancel_job(session: Session, job: Job) -> Job:
+async def cancel_job(session: AsyncSession, job: Job) -> Job:
     if job.status in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}:
         return job
     job.status = JobStatus.CANCELED
-    job.finished_at = datetime.now(timezone.utc)
+    job.finished_at = utc_now()
     session.add(job)
-    session.commit()
-    session.refresh(job)
+    await session.commit()
+    await session.refresh(job)
     session.expunge(job)
     return job
 
@@ -132,13 +139,14 @@ def merge_metadata(
     return MetadataSchema.model_validate(merged)
 
 
-def next_metadata_version(session: Session, tenant_id: UUID, document_id: UUID) -> int:
-    stmt = select(DocumentMetadata.version).where(
+async def next_metadata_version(session: AsyncSession, tenant_id: UUID, document_id: UUID) -> int:
+    stmt = select(func.max(DocumentMetadata.version)).where(
         DocumentMetadata.tenant_id == tenant_id,
         DocumentMetadata.document_id == document_id,
     )
-    versions = session.exec(stmt).all()
-    return max(versions, default=0) + 1
+    result = await session.exec(stmt)
+    current = result.one_or_none()
+    return (current or 0) + 1
 
 
 def metadata_fingerprint(metadata: MetadataSchema) -> str:
@@ -146,15 +154,15 @@ def metadata_fingerprint(metadata: MetadataSchema) -> str:
     return _fingerprint_from_payload(payload)
 
 
-def record_metadata_version(
-    session: Session,
+async def record_metadata_version(
+    session: AsyncSession,
     *,
     tenant_id: UUID,
     document_id: UUID,
     metadata: MetadataSchema | None,
     fingerprint: str | None = None,
 ) -> DocumentMetadata:
-    version = next_metadata_version(session, tenant_id, document_id)
+    version = await next_metadata_version(session, tenant_id, document_id)
 
     if metadata is None:
         payload = {}  # empty payload when metadata is missing
@@ -171,12 +179,12 @@ def record_metadata_version(
         payload=payload,
     )
     session.add(record)
-    session.flush()
+    await session.flush()
     return record
 
 
-def fetch_document_metadata(
-    session: Session,
+async def fetch_document_metadata(
+    session: AsyncSession,
     *,
     tenant_id: UUID,
     document_id: UUID,
@@ -189,7 +197,7 @@ def fetch_document_metadata(
 
     if version is None or version == 'latest':
         stmt = stmt.order_by(desc('version'))
-        result = session.exec(stmt)
+        result = await session.exec(stmt)
         record = result.first()
         if record is not None:
             session.expunge(record)
@@ -206,15 +214,15 @@ def fetch_document_metadata(
         raise ValueError(f'Invalid version specifier: {version!r}') from exc
 
     stmt = stmt.where(DocumentMetadata.version == version_int)
-    result = session.exec(stmt)
+    result = await session.exec(stmt)
     record = result.first()
     if record is not None:
         session.expunge(record)
     return record
 
 
-def manual_metadata_update(
-    session: Session,
+async def manual_metadata_update(
+    session: AsyncSession,
     *,
     tenant_id: UUID,
     document_id: UUID,
@@ -222,19 +230,19 @@ def manual_metadata_update(
 ) -> DocumentMetadata:
     """Persist a manual metadata version, skipping agent processing."""
     fingerprint = metadata_fingerprint(metadata)
-    existing = fetch_document_metadata(session, tenant_id=tenant_id, document_id=document_id, version='latest')
+    existing = await fetch_document_metadata(session, tenant_id=tenant_id, document_id=document_id, version='latest')
     if existing and existing.fingerprint == fingerprint:
         return existing
 
-    record = record_metadata_version(
+    record = await record_metadata_version(
         session,
         tenant_id=tenant_id,
         document_id=document_id,
         metadata=metadata,
         fingerprint=fingerprint,
     )
-    session.commit()
-    session.refresh(record)
+    await session.commit()
+    await session.refresh(record)
     session.expunge(record)
     return record
 

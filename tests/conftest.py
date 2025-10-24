@@ -1,6 +1,9 @@
 import os
 
 import pytest
+from dotenv import load_dotenv
+
+from core.config import get_settings
 
 # Provide default test-friendly configuration values.
 os.environ.setdefault('POSTGRES_URL', 'sqlite:///:memory:')
@@ -22,3 +25,19 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if 'langsmith' in item.keywords:
                 item.add_marker(skip_langsmith)
+
+
+@pytest.fixture()
+def refresh_settings():
+    def _refresh(*, reload_dotenv: bool = False, dotenv_path: str | None = None):
+        if reload_dotenv:
+            load_dotenv(dotenv_path, override=True)
+        get_settings.cache_clear()
+        settings = get_settings()
+        # Ensure the Dramatiq broker picks up the refreshed settings (e.g. Redis credentials).
+        from core.queueing import setup_broker
+
+        setup_broker()
+        return settings
+
+    return _refresh

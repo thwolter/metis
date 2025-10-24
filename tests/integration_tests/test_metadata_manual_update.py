@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import sys
 from pathlib import Path
@@ -10,7 +11,6 @@ from sqlmodel import Session, create_engine
 from tenauth.schemas import AccessContext
 
 from core.config import get_settings
-from metadata import api as metadata_api
 from metadata.models import DocumentMetadata, Job
 
 
@@ -42,6 +42,8 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     for module in ('metadata.tasks', 'metadata.api', 'main', 'core.queueing'):
         sys.modules.pop(module, None)
 
+    metadata_module = importlib.import_module('metadata.api')
+
     redis_module = importlib.import_module('dramatiq.brokers.redis')
     monkeypatch.setattr(redis_module, 'RedisBroker', _DummyBroker)
 
@@ -69,19 +71,60 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     tenant_id = uuid4()
     user_id = uuid4()
 
+    class AsyncSessionWrapper:
+        def __init__(self, session: Session):
+            self._session = session
+
+        def add(self, *args, **kwargs):
+            return self._session.add(*args, **kwargs)
+
+        async def commit(self):
+            return await asyncio.to_thread(self._session.commit)
+
+        async def refresh(self, instance):
+            return await asyncio.to_thread(self._session.refresh, instance)
+
+        async def rollback(self):
+            return await asyncio.to_thread(self._session.rollback)
+
+        async def exec(self, statement):
+            return await asyncio.to_thread(self._session.exec, statement)
+
+        def expunge(self, instance):
+            return self._session.expunge(instance)
+
+        async def get(self, model, ident):
+            return await asyncio.to_thread(self._session.get, model, ident)
+
+        async def flush(self):
+            return await asyncio.to_thread(self._session.flush)
+
+        @property
+        def info(self):
+            return self._session.info
+
+        def __getattr__(self, item):
+            return getattr(self._session, item)
+
     def override_access_context():
         return AccessContext(tenant_id=tenant_id, user_id=user_id)
 
-    def override_scoped_session():
-        session = Session(engine)
-        try:
-            yield session
-            session.commit()
-        finally:
-            session.close()
+    async def override_scoped_session():
+        with Session(engine, expire_on_commit=False) as sync_session:
+            session = AsyncSessionWrapper(sync_session)
+            exc: Exception | None = None
+            try:
+                yield session
+            except Exception as err:
+                exc = err
+                await session.rollback()
+                raise
+            finally:
+                if exc is None:
+                    await session.commit()
 
-    app.dependency_overrides[metadata_api.require_access_context] = override_access_context
-    app.dependency_overrides[metadata_api.get_scoped_session] = override_scoped_session
+    app.dependency_overrides[metadata_module.require_access_context] = override_access_context
+    app.dependency_overrides[metadata_module.get_scoped_session] = override_scoped_session
 
     with TestClient(app) as test_client:
         yield test_client
@@ -91,6 +134,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     Job.__table__.drop(engine)  # type:ignore[missing-attribute]
     Job.__table__.schema = original_job_schema  # type: ignore[missing-attribute]
     DocumentMetadata.__table__.schema = original_doc_schema  # type: ignore[missing-attribute]
+    engine.dispose()
     get_settings.cache_clear()
     if db_path.exists():
         db_path.unlink()

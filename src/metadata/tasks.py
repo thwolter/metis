@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from uuid import UUID
 
 import dramatiq
@@ -10,10 +10,10 @@ from tenauth.schemas import AccessContext
 
 from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
-from core.db import session_scope
+from core.db import scoped_session
 from core.logging import configure_logging
 from core.queueing import setup_broker
-from metadata.models import Job, JobStatus
+from metadata.models import Job, JobStatus, utc_now
 from metadata.service import (
     merge_metadata,
     metadata_fingerprint,
@@ -32,22 +32,22 @@ class JobSnapshot:
     document_id: UUID
 
 
-def _load_job(
+async def _load_job(
     job_id: UUID,
     access_context: AccessContext,
 ) -> tuple[JobSnapshot, ContextSchema, MetadataSchema | None, list[str]]:
-    with session_scope(access_context=access_context) as session:
-        job = session.get(Job, job_id)
+    async with scoped_session(access_context=access_context) as session:
+        job = await session.get(Job, job_id)
         if job is None:
             raise LookupError(f'Job {job_id} not found')
         if job.status in {JobStatus.SUCCEEDED, JobStatus.CANCELED}:
             raise LookupError(f'Job {job_id} already in terminal status {job.status}')
         job.status = JobStatus.RUNNING
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = utc_now()
         job.error_type = None
         job.error_msg = None
         session.add(job)
-        session.flush()
+        await session.flush()
         snapshot = JobSnapshot(job_id=job.job_id, document_id=job.document_id)
         context = ContextSchema(
             digest=job.document_digest,
@@ -77,15 +77,15 @@ def _run_agent(context: ContextSchema) -> MetadataSchema | None:
     return MetadataSchema.model_validate(result or {})
 
 
-def _finalise_success(
+async def _finalise_success(
     job_id: UUID,
     *,
     metadata: MetadataSchema,
     fingerprint: str,
     access_context: AccessContext,
 ) -> None:
-    with session_scope(access_context=access_context) as session:
-        job = session.get(Job, job_id)
+    async with scoped_session(access_context=access_context) as session:
+        job = await session.get(Job, job_id)
         if job is None:
             logger.warning('Job %s disappeared before completion', job_id)
             return
@@ -93,7 +93,7 @@ def _finalise_success(
             logger.info('Job %s was canceled; skip result persistence', job_id)
             return
 
-        record_metadata_version(
+        await record_metadata_version(
             session,
             tenant_id=job.tenant_id,
             document_id=job.document_id,
@@ -102,27 +102,27 @@ def _finalise_success(
         )
 
         job.status = JobStatus.SUCCEEDED
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = utc_now()
         job.processing_fingerprint = fingerprint
         session.add(job)
 
 
-def _finalise_failure(job_id: UUID, exc: Exception, access_context: AccessContext) -> None:
-    with session_scope(access_context=access_context) as session:
-        job = session.get(Job, job_id)
+async def _finalise_failure(job_id: UUID, exc: Exception, access_context: AccessContext) -> None:
+    async with scoped_session(access_context=access_context) as session:
+        job = await session.get(Job, job_id)
         if job is None:
             return
         job.status = JobStatus.FAILED
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = utc_now()
         job.retries += 1
         job.error_type = exc.__class__.__name__
         job.error_msg = str(exc)
         session.add(job)
 
 
-def _process_job(job_id: UUID, access_context: AccessContext) -> None:
+async def _process_job(job_id: UUID, access_context: AccessContext) -> None:
     try:
-        snapshot, context, base_metadata, locked_fields = _load_job(job_id, access_context)
+        snapshot, context, base_metadata, locked_fields = await _load_job(job_id, access_context)
     except LookupError as exc:  # pragma: no cover - defensive
         logger.warning(str(exc))
         return
@@ -139,7 +139,7 @@ def _process_job(job_id: UUID, access_context: AccessContext) -> None:
         )
         fingerprint = metadata_fingerprint(merged)
         update_vecstore_metadata(context, document_id, merged)
-        _finalise_success(
+        await _finalise_success(
             snapshot.job_id,
             metadata=merged,
             fingerprint=fingerprint,
@@ -151,13 +151,13 @@ def _process_job(job_id: UUID, access_context: AccessContext) -> None:
             logger.exception('Job %s failed during metadata generation', job_id)
         else:
             logger.exception('Job %s failed during persistence', job_id)
-        _finalise_failure(snapshot.job_id, exc, access_context)
+        await _finalise_failure(snapshot.job_id, exc, access_context)
 
 
 @dramatiq.actor
 def process_metadata_job(job_id: str, tenant_id: str, user_id: str) -> None:
     access_context = AccessContext(tenant_id=UUID(tenant_id), user_id=UUID(user_id))
-    _process_job(UUID(job_id), access_context)
+    asyncio.run(_process_job(UUID(job_id), access_context))
 
 
 def enqueue_job(job_id: UUID, tenant_id: UUID, user_id: UUID) -> None:

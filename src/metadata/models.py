@@ -6,16 +6,21 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import ConfigDict
-from sqlalchemy import JSON, Column, Index, String, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, Column, Index, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
+def utc_now() -> datetime:
+    """Return a timezone-naive UTC datetime for TIMESTAMP WITHOUT TIME ZONE columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class JobStatus(str, Enum):
-    QUEUED = 'queued'
-    RUNNING = 'running'
-    SUCCEEDED = 'succeeded'
-    FAILED = 'failed'
-    CANCELED = 'canceled'
+    QUEUED = 'QUEUED'
+    RUNNING = 'RUNNING'
+    SUCCEEDED = 'SUCCEEDED'
+    FAILED = 'FAILED'
+    CANCELED = 'CANCELED'
 
 
 class BaseSQLModel(SQLModel):
@@ -34,6 +39,10 @@ class Job(BaseSQLModel, table=True):
             'ingestion_fingerprint',
             name='uq_job_idempotency',
         ),
+        CheckConstraint(
+            "status in ('queued','running','succeeded','failed','canceled')",
+            name='ck_metadata_jobs_status',
+        ),
         Index('ix_jobs_status_priority_created', 'status', 'priority', 'created_at'),
         Index('ix_jobs_tenant_created', 'tenant_id', 'created_at'),
         {'schema': 'metadata'},
@@ -45,12 +54,19 @@ class Job(BaseSQLModel, table=True):
     document_id: UUID
     profile: str
     ingestion_fingerprint: str
-    status: JobStatus = Field(default=JobStatus.QUEUED)
+    status: JobStatus = Field(
+        default=JobStatus.QUEUED,
+        sa_column=Column(
+            String(20),
+            nullable=False,
+            server_default=JobStatus.QUEUED.value,
+        ),
+    )
     priority: int = Field(default=5)
     retries: int = Field(default=0)
     error_type: str | None = None
     error_msg: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=utc_now)
     started_at: datetime | None = None
     finished_at: datetime | None = None
     processing_fingerprint: str | None = None
@@ -89,7 +105,7 @@ class DocumentMetadata(BaseSQLModel, table=True):
     document_id: UUID = Field(primary_key=True)
     version: int = Field(primary_key=True)
     fingerprint: str
-    extracted_on: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    extracted_on: datetime = Field(default_factory=utc_now)
     payload: dict[str, Any] = Field(
         sa_column=Column(JSON, nullable=False),
         description='Full metadata payload as JSON.',
