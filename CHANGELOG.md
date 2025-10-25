@@ -1,3 +1,11 @@
+## 0.3.0 (2025-10-25)
+
+### Feat
+
+- restructure infrastructure and bootstrap database roles
+- add role validation and creation for metadata_rw
+- add CORS middleware to support frontend development
+
 ## 0.2.1 (2025-10-13)
 
 ### Refactor
