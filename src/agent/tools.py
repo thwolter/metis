@@ -2,6 +2,7 @@ from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
+from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
 from core.config import get_settings
@@ -39,14 +40,16 @@ def first_chunks(
         collection_uuid = get_collection_uuid(conn, context.collection_name)
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                """
-                SELECT document, cmetadata
-                FROM langchain_pg_embedding
-                WHERE collection_id = %s
-                  AND cmetadata ->> 'digest' = %s
-                ORDER BY (cmetadata ->> 'chunk_id')::int ASC
-                LIMIT %s OFFSET %s
-                """,
+                sql.SQL(
+                    """
+                    SELECT document, cmetadata
+                    FROM {}.langchain_pg_embedding
+                    WHERE collection_id = %s
+                      AND cmetadata ->> 'digest' = %s
+                    ORDER BY (cmetadata ->> 'chunk_id')::int ASC
+                    LIMIT %s OFFSET %s
+                    """
+                ).format(sql.Identifier(settings.pg_vector_schema)),
                 (collection_uuid, context.digest, limit, offset),
             )
             rows = cur.fetchall()

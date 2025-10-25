@@ -1,5 +1,3 @@
--- Create logical roles (no login)
-\echo '=== Running bootstrap: creating roles and schema ==='
 
 DO $$
 BEGIN
@@ -63,5 +61,3 @@ END$$;
 
 -- Optional: enable pgcrypto for gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-\echo '=== Bootstrap completed ==='
