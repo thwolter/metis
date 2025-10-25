@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+from collections.abc import Awaitable
 from dataclasses import dataclass
+from typing import TypeVar
 from uuid import UUID
 
 import dramatiq
@@ -24,6 +27,27 @@ from metadata.service import (
 configure_logging()
 setup_broker()
 logger = logging.getLogger(__name__)
+
+# Maintain a single background event loop so async DB resources stay tied to a live loop.
+_EVENT_LOOP = asyncio.new_event_loop()
+
+
+def _run_background_loop(loop: asyncio.AbstractEventLoop) -> None:
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+_EVENT_LOOP_THREAD = threading.Thread(target=_run_background_loop, args=(_EVENT_LOOP,), daemon=True)
+_EVENT_LOOP_THREAD.start()
+
+
+T = TypeVar('T')
+
+
+def _run_in_event_loop(coro: Awaitable[T]) -> T:
+    future = asyncio.run_coroutine_threadsafe(coro, _EVENT_LOOP)  # type: ignore[bad-argument-type]
+    # Propagate exceptions to the dramatiq worker thread.
+    return future.result()
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +181,7 @@ async def _process_job(job_id: UUID, access_context: AccessContext) -> None:
 @dramatiq.actor
 def process_metadata_job(job_id: str, tenant_id: str, user_id: str) -> None:
     access_context = AccessContext(tenant_id=UUID(tenant_id), user_id=UUID(user_id))
-    asyncio.run(_process_job(UUID(job_id), access_context))
+    _run_in_event_loop(_process_job(UUID(job_id), access_context))
 
 
 def enqueue_job(job_id: UUID, tenant_id: UUID, user_id: UUID) -> None:

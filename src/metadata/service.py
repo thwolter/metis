@@ -269,7 +269,7 @@ def update_vecstore_metadata(context: ContextSchema, document_id: UUID, metadata
                 cur.execute(
                     sql.SQL(
                         """
-                        UPDATE vectra.langchain_pg_embedding
+                        UPDATE {}.langchain_pg_embedding
                         SET cmetadata = COALESCE(cmetadata, '{{}}'::jsonb) || %s::jsonb
                         WHERE collection_id = %s::uuid
                           AND cmetadata ->> 'digest' = %s
