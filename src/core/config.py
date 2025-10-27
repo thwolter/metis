@@ -1,10 +1,10 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .utils import load_version
+from .utils import load_version, parse_cors_origins
 
 
 class Settings(BaseSettings):
@@ -33,7 +33,15 @@ class Settings(BaseSettings):
     otel_traces_enabled: bool = True
     otel_metrics_enabled: bool = True
     jwt_secret: SecretStr = SecretStr('dev-internal-token')
+
     pg_vector_schema: str = 'vectra'
+
+    cors_allow_origins: tuple[str, ...] = ()
+
+    @field_validator('cors_allow_origins', mode='before')
+    @classmethod
+    def _normalize_cors_origins(cls, value: Any) -> tuple[str, ...]:
+        return parse_cors_origins(value)
 
     @field_validator('postgres_url', mode='before')
     @classmethod
