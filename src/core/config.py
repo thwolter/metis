@@ -1,8 +1,10 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .utils import load_version
 
 
 class Settings(BaseSettings):
@@ -15,7 +17,7 @@ class Settings(BaseSettings):
     env: Literal['development', 'production', 'testing'] = 'production'
     app_name: str = 'Metis'
     debug: bool | None = None
-    version: str = '0.2.0'
+    version: str = Field(default_factory=load_version)
     admin_email: str = 'support@riskary.de'
 
     postgres_url: SecretStr
@@ -33,14 +35,21 @@ class Settings(BaseSettings):
     jwt_secret: SecretStr = SecretStr('dev-internal-token')
     pg_vector_schema: str = 'vectra'
 
+    @field_validator('postgres_url', mode='before')
+    @classmethod
+    def validate_postgres_url(cls, dsn: str) -> str:
+        if dsn.startswith('postgres://'):
+            return dsn.replace('postgres://', 'postgresql://', 1)
+        return dsn
+
     @property
-    def pg_vector_url(self) -> SecretStr:
-        """Returns the PostgreSQL database URL for PGVector.
-        Converts 'postgres://' to 'postgresql://' if needed.
-        """
+    def async_postgres_url(self) -> SecretStr:
+        # Convert postgresql:// to postgresql+asyncpg:// for async engine
         url = self.postgres_url.get_secret_value()
+        if url.startswith('postgresql://'):
+            url = url.replace('postgresql://', 'postgresql+asyncpg://', 1)
         if url.startswith('postgres://'):
-            url = url.replace('postgres://', 'postgresql://', 1)
+            url = url.replace('postgres://', 'postgresql+asyncpg://', 1)
         return SecretStr(url)
 
 

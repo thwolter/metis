@@ -87,9 +87,9 @@ async def _load_job(
     return snapshot, context, base_metadata, locked_fields
 
 
-def _run_agent(context: ContextSchema) -> MetadataSchema | None:
+async def _run_agent(context: ContextSchema) -> MetadataSchema | None:
     try:
-        result = graph.invoke({}, config={'configurable': context.model_dump()})
+        result = await graph.ainvoke({}, config={'configurable': context.model_dump()})
     except Exception:  # pragma: no cover - external dependency
         logger.exception('Metadata agent failed: context=%s', context)
         raise
@@ -155,14 +155,14 @@ async def _process_job(job_id: UUID, access_context: AccessContext) -> None:
     metadata_candidate: MetadataSchema | None = None
     logger.info('Processing metadata job %s for document %s', snapshot.job_id, document_id)
     try:
-        metadata_candidate = _run_agent(context)
+        metadata_candidate = await _run_agent(context)
         merged = merge_metadata(
             base=base_metadata,
             generated=metadata_candidate,
             locked_fields=locked_fields,
         )
         fingerprint = metadata_fingerprint(merged)
-        update_vecstore_metadata(context, document_id, merged)
+        await update_vecstore_metadata(context, document_id, merged)
         await _finalise_success(
             snapshot.job_id,
             metadata=merged,

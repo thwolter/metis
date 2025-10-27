@@ -1,48 +1,42 @@
+from __future__ import annotations
+
+import re
+from typing import Final
 from uuid import UUID
 
-import psycopg2
+from asyncpg import Connection
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
-from psycopg2 import sql
-from tenauth.tenancy import dsn_with_tenant
 
 from core.config import get_settings
 
 settings = get_settings()
+_IDENTIFIER_PATTERN: Final[re.Pattern[str]] = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 
-def _normalize_psycopg_dsn(dsn: str) -> str:
-    """Strip SQLAlchemy driver hints so psycopg2 accepts the URI."""
-    scheme, sep, rest = dsn.partition('://')
-    if sep and '+' in scheme:
-        scheme = scheme.split('+', 1)[0]
-        return f'{scheme}{sep}{rest}'
-    return dsn
+def _validate_schema(schema: str) -> str:
+    if not _IDENTIFIER_PATTERN.fullmatch(schema):
+        raise ValueError(f'invalid pgvector schema name {schema!r}')
+    return schema
 
 
-def pg_connect(tenant_id: UUID):
-    dsn = settings.pg_vector_url.get_secret_value()
-    tenant_dsn = dsn_with_tenant(dsn, tenant_id)
-    psycopg_dsn = _normalize_psycopg_dsn(tenant_dsn)
-    return psycopg2.connect(psycopg_dsn)
+VECTOR_SCHEMA: Final[str] = _validate_schema(settings.pg_vector_schema)
 
 
-def get_collection_uuid(conn, collection_name: str) -> str:
-    with conn.cursor() as cur:
-        cur.execute(
-            sql.SQL(
-                """
-                SELECT uuid
-                FROM {}.langchain_pg_collection
-                WHERE name = %s
-                """
-            ).format(sql.Identifier(settings.pg_vector_schema)),
-            (collection_name,),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise ValueError(f'Collection not found: {collection_name}')
-        return row[0]
+async def get_collection_uuid(conn: Connection, collection_name: str) -> str:
+    query = f"""
+        SELECT uuid
+        FROM {VECTOR_SCHEMA}.langchain_pg_collection
+        WHERE name = $1
+    """
+    row = await conn.fetchrow(query, collection_name)
+    if row is None:
+        raise ValueError(f'Collection not found: {collection_name}')
+
+    uuid_value = str(row['uuid']).strip()
+    if not uuid_value:
+        raise ValueError('Collection has empty UUID value')
+    return uuid_value
 
 
 def get_vectorstore(*, collection_name: str, tenant_id: UUID) -> PGVector:
@@ -51,7 +45,15 @@ def get_vectorstore(*, collection_name: str, tenant_id: UUID) -> PGVector:
     This avoids importing DB drivers or creating connections at module import time,
     which helps tests and local dev that only import the graph.
     """
-    dsn = settings.pg_vector_url.get_secret_value()
-    tenant_dsn = dsn_with_tenant(dsn, tenant_id)
+    dsn = settings.async_postgres_url.get_secret_value()
     embeddings = OpenAIEmbeddings(model='text-embedding-3-small')
-    return PGVector(embeddings=embeddings, collection_name=collection_name, connection=tenant_dsn)
+    return PGVector(
+        embeddings=embeddings,
+        collection_name=collection_name,
+        connection=dsn,
+        async_mode=True,
+        create_extension=False,
+        engine_args={
+            'connect_args': {'server_settings': {'app.tenant_id': str(tenant_id), 'search_path': 'vectra,public'}}
+        },
+    )

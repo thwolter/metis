@@ -14,4 +14,5 @@ class State(TypedDict, total=False):
     """Graph state tracking conversation history and metadata extraction."""
 
     messages: Annotated[list[AnyMessage], add_messages]
-    metadata: Annotated[MetadataSchema | None, _prefer_metadata]
+    metadata: MetadataSchema
+    retrieved_chunks: Annotated[list[int], lambda a, b: a + b]

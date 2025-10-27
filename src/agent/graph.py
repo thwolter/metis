@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from langgraph.constants import START
@@ -6,24 +7,23 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from agent.nodes import (
     finalize_metadata,
-    metadata_cleaner,
     metadata_extractor,
-    tools,
+    metadata_tools,
+    should_continue,
     type_extractor,
 )
 from agent.schemas import ContextSchema, MetadataSchema
 from agent.state import State
+from agent.tools import first_chunks
 
 builder = StateGraph(State, context_schema=ContextSchema, output_schema=MetadataSchema)
 
 builder.add_node('type_extractor', type_extractor)  # pyrefly: ignore[no-matching-overload]
 builder.add_node('metadata_extractor', metadata_extractor)  # pyrefly: ignore[no-matching-overload]
-builder.add_node('metadata_cleaner', metadata_cleaner)  # pyrefly: ignore[no-matching-overload]
 builder.add_node('finalize_metadata', finalize_metadata)  # pyrefly: ignore[no-matching-overload]
 
-builder.add_node('tools_for_type', ToolNode(tools))
-builder.add_node('tools_for_metadata', ToolNode(tools))
-builder.add_node('tools_for_cleaner', ToolNode(tools))
+builder.add_node('tools_for_type', ToolNode([first_chunks]))
+builder.add_node('tools_for_metadata', ToolNode(metadata_tools))
 
 builder.add_edge(START, 'type_extractor')
 builder.add_conditional_edges(
@@ -41,31 +41,27 @@ builder.add_conditional_edges(
         '__end__': 'finalize_metadata',
     },
 )
-builder.add_edge('tools_for_metadata', 'metadata_extractor')
-
 builder.add_conditional_edges(
-    source='metadata_cleaner',
-    path=tools_condition,
+    source='tools_for_metadata',
+    path=should_continue,
     path_map={
-        'tools': 'tools_for_cleaner',
-        '__end__': 'finalize_metadata',
+        'continue': 'metadata_extractor',
+        'finalize': 'finalize_metadata',
     },
 )
-builder.add_edge('tools_for_cleaner', 'metadata_cleaner')
 builder.add_edge('finalize_metadata', '__end__')
 
 graph = builder.compile()
 
 
 if __name__ == '__main__':
-    digest_hr = 'dkGJT3drmokocKeOni90TR9qsgdIURN6kTmBFe0lnfU='
-    digest_ar = 'vI7EHYpQg6bnz2PsLviZVeneXbMs9iqDQyOgUjIhClc='
+    digest = 'ks4K+uaD5QCsFla+ySvya1Arus2c/iRjr+JP4q/DP9s='
 
     context = ContextSchema(
-        digest=digest_hr,
+        digest=digest,
         collection_name='default',
-        tenant_id=UUID('ae579baf-91c2-4497-abf5-44867e06c7a1'),
+        tenant_id=UUID('319f8924-73f5-4028-9587-854f64d08a2d'),
     )
 
-    res = graph.invoke({}, config={'configurable': context.model_dump()})
+    res = asyncio.run(graph.ainvoke({}, config={'configurable': context.model_dump()}))
     print(res)

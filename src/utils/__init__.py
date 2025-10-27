@@ -1,5 +1,4 @@
 __all__ = [
-    'pg_connect',
     'get_collection_uuid',
     'get_vectorstore',
 ]

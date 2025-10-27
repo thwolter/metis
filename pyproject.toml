@@ -27,6 +27,9 @@ dependencies = [
     "dramatiq>=1.16.0",
     "redis>=6.4.0",
     "tenauth @ git+https://github.com/thwolter/fde-tenauth.git@main",
+    "pyrefly>=0.38.2",
+    "ruff>=0.14.2",
+    "psycopg[binary]>=3.2.12",
 ]
 [dependency-groups]
 dev = [
