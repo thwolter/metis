@@ -1,12 +1,14 @@
+from __future__ import annotations
+
+from typing import Any
+
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
-from langchain_tavily import TavilySearch
-from psycopg2 import sql
-from psycopg2.extras import RealDictCursor
 
 from core.config import get_settings
-from utils.vstore import get_collection_uuid, get_vectorstore, pg_connect
+from core.db import pg_connect
+from utils.vstore import VECTOR_SCHEMA, get_collection_uuid, get_vectorstore
 
 from .schemas import ContextSchema
 
@@ -14,18 +16,12 @@ settings = get_settings()
 
 
 @tool('first_chunks')
-def first_chunks(
+async def first_chunks(
     config: RunnableConfig,
     k: int = 3,
     skip: int = 0,
 ) -> Document:
-    """Fetch the next `k` chunks for the current digest via SQL, ordered by chunk id and return as a single document.
-
-    :param config: Runnable configuration that carries digest context.
-    :param k: Number of chunks to return.
-    :param skip: Number of matching chunks to skip before returning results.
-
-    """
+    """Fetch the next `k` chunks for the current digest via SQL, ordered by chunk id and return as a single document."""
 
     context = ContextSchema.model_validate(config['configurable'])
     if not context.digest or not context.collection_name:
@@ -36,55 +32,52 @@ def first_chunks(
     if limit == 0:
         return Document(page_content='')
 
-    with pg_connect(tenant_id=context.tenant_id) as conn:
-        collection_uuid = get_collection_uuid(conn, context.collection_name)
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                sql.SQL(
-                    """
-                    SELECT document, cmetadata
-                    FROM {}.langchain_pg_embedding
-                    WHERE collection_id = %s
-                      AND cmetadata ->> 'digest' = %s
-                    ORDER BY (cmetadata ->> 'chunk_id')::int ASC
-                    LIMIT %s OFFSET %s
-                    """
-                ).format(sql.Identifier(settings.pg_vector_schema)),
-                (collection_uuid, context.digest, limit, offset),
-            )
-            rows = cur.fetchall()
+    conn = await pg_connect(tenant_id=context.tenant_id)
+    try:
+        collection_uuid = await get_collection_uuid(conn, context.collection_name)
+        query = f"""
+            SELECT document, cmetadata
+            FROM {VECTOR_SCHEMA}.langchain_pg_embedding
+            WHERE collection_id = $1
+              AND cmetadata ->> 'digest' = $2
+            ORDER BY (cmetadata ->> 'chunk_id')::int ASC
+            LIMIT $3 OFFSET $4
+        """
+        rows = await conn.fetch(query, collection_uuid, context.digest, limit, offset)
+    finally:
+        await conn.close()
 
-    # Map rows to LangChain Document objects
+    if not rows:
+        return Document(page_content='')
+
+    metadata_value = rows[0]['cmetadata']
+    metadata: dict[str, Any] = metadata_value if isinstance(metadata_value, dict) else {}
+    file_name = metadata.get('source')
+    page_content = '\n\n'.join(row['document'] for row in rows)
     return Document(
-        page_content='\n\n'.join([row['document'] for row in rows]),
-        metadata={'file_name': rows[0]['cmetadata']['source']},
+        page_content=page_content,
+        metadata={'file_name': file_name} if file_name else {},
     )
 
 
 @tool('retriever')
-def retriever(
+async def retriever(
     query: str,
     config: RunnableConfig,
-    **kwargs,
+    exclude_chunk_ids: list[int] | None = None,
 ) -> Document:
     """Retrieve documents by semantic search and return as a single document.
 
     :param config:
     :param query: Natural-language search terms only (what the user wants to find). Do NOT include any digest or document IDs here.
+    :param exclude_chunk_ids: exclude these chunk IDs from the search results
 
     """
     context = ContextSchema.model_validate(config['configurable'])
-    if not kwargs:
-        kwargs = {}
-    kwargs.setdefault('filter', {'digest': context.digest})
+    search_kwargs = {
+        'filter': {'$and': [{'digest': {'$eq': context.digest}}, {'chunk_id': {'$nin': exclude_chunk_ids or []}}]}
+    }
 
     vs = get_vectorstore(collection_name=context.collection_name, tenant_id=context.tenant_id)
-    docs = vs.search(query, 'similarity', **kwargs)
-    return Document(page_content='\n\n'.join([doc.page_content for doc in docs]))
-
-
-search_tool = tool = TavilySearch(
-    tavily_api_key=settings.tavily_api_key.get_secret_value(),
-    max_results=5,
-    topic='general',
-)
+    docs = await vs.asearch(query, 'similarity', **search_kwargs)
+    return Document(page_content='\n\n'.join(doc.page_content for doc in docs))

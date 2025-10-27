@@ -14,6 +14,8 @@ class ContextSchema(BaseModel):
 
 
 class MetadataSchema(BaseModel):
+    """Respond to the user with this"""
+
     document_type: str | None = Field(default=None, description='The type of document, e.g. Annual Report')
     company_name: str | None = Field(default=None, description='The name of the company')
     parent_company: str | None = Field(default=None, description='The parent company of the company')
@@ -25,4 +27,6 @@ class MetadataSchema(BaseModel):
         default=None, description='The company register where the document was received'
     )
     register_number: str | None = Field(default=None, description="The company's register number")
+    language: str | None = Field(default=None, description='The language of the document')
+    region: str | None = Field(default=None, description='The region of the document')
     tags: List[str] | None = Field(default=None, description='Tags for the document')

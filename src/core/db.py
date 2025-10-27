@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import UUID
 
+import asyncpg
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from tenauth.schemas import AccessContext
@@ -12,14 +14,14 @@ from core.config import get_settings
 
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
+_settings = get_settings()
 
 
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
-        settings = get_settings()
-        url = settings.postgres_url.get_secret_value()
-        _engine = create_async_engine(url, echo=settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
+        url = _settings.async_postgres_url.get_secret_value()
+        _engine = create_async_engine(url, echo=_settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
     return _engine
 
 
@@ -56,3 +58,8 @@ async def scoped_session(*, access_context: AccessContext, verify: bool = True) 
         finally:
             if exc is None:
                 await session.commit()
+
+
+async def pg_connect(tenant_id: UUID) -> asyncpg.Connection:
+    dsn = _settings.postgres_url.get_secret_value()
+    return await asyncpg.connect(dsn=dsn, server_settings={'app.tenant_id': str(tenant_id)})
