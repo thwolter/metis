@@ -4,13 +4,6 @@ from starlette.middleware.cors import CORSMiddleware
 from core import configure_logging, get_settings, init_observability
 from metadata.api import router as metadata_router
 
-origins = [
-    'http://localhost',
-    'http://localhost:3000',
-    'https://localhost',
-    'https://localhost:3000',
-]
-
 
 def create_app() -> FastAPI:
     configure_logging()
@@ -21,7 +14,7 @@ def create_app() -> FastAPI:
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=settings.cors_allow_origins,
         allow_credentials=True,
         allow_methods=['*'],
         allow_headers=['*'],
