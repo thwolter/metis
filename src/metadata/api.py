@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from typing import Any
 from uuid import UUID
@@ -21,10 +20,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.datastructures import URL
 from starlette.websockets import WebSocketState
 from tenauth.fastapi import require_access_context
-from tenauth.schemas import AccessContext, AuthContext
+from tenauth.schemas import AccessContext
+from tenauth.session import access_scoped_session_ctx
+from tenauth.websocket import websocket_access_context
 
 from agent.schemas import MetadataSchema
-from core.config import get_settings
+from core.db import session_factory
 from core.deps import SessionDep
 from metadata import tasks
 from metadata.models import Job, JobStatus
@@ -105,58 +106,6 @@ def _job_status_payload(job: Job, base_url: URL) -> dict[str, Any]:
     return payload.model_dump(mode='json')
 
 
-async def websocket_access_context(websocket: WebSocket) -> AccessContext:
-    token: str | None = None
-    authorization = websocket.headers.get('Authorization')
-
-    if authorization:
-        scheme, _, credentials = authorization.partition(' ')
-        if scheme.lower() != 'bearer' or not credentials:
-            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason='Invalid authorization header')
-        token = credentials.strip()
-    else:
-        query_token = websocket.query_params.get('access_token') or websocket.query_params.get('token')
-        if query_token:
-            token = query_token.strip()
-        else:
-            protocols = websocket.headers.get('Sec-WebSocket-Protocol', '')
-            for candidate in protocols.split(','):
-                candidate = candidate.strip()
-                if candidate.startswith('access_token='):
-                    token = candidate.split('=', 1)[1].strip()
-                    break
-
-    if not token:
-        settings = get_settings()
-        if settings.env == 'testing':
-            tenant_raw = os.getenv('METIS_TEST_TENANT_ID', '00000000-0000-0000-0000-000000000000')
-            user_raw = os.getenv('METIS_TEST_USER_ID', '00000000-0000-0000-0000-000000000000')
-            try:
-                tenant_uuid = UUID(tenant_raw)
-                user_uuid = UUID(user_raw)
-            except ValueError as exc:  # pragma: no cover - guard against misconfiguration
-                raise WebSocketException(
-                    code=status.WS_1008_POLICY_VIOLATION,
-                    reason='Invalid testing access context identifiers',
-                ) from exc
-            return AccessContext(tenant_id=tenant_uuid, user_id=user_uuid)
-
-        raise WebSocketException(
-            code=status.WS_1008_POLICY_VIOLATION,
-            reason='Missing authentication token',
-        )
-
-    if token.lower().startswith('bearer '):
-        token = token.split(' ', 1)[1].strip()
-
-    try:
-        auth_context = AuthContext.from_token(token)
-    except HTTPException as exc:
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail) from exc
-
-    return AccessContext(tenant_id=auth_context.tid, user_id=auth_context.sub)
-
-
 @router.post('/metadata', response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED, tags=['Jobs'])
 async def create_metadata_job(
     payload: CreateJobDTO,
@@ -230,35 +179,36 @@ async def get_job_status(job_id: UUID, request: Request, session: AsyncSession =
 
 
 @router.websocket('/jobs/{job_id}/stream', name='stream_job_status')
-async def stream_job_status(
-    websocket: WebSocket,
-    job_id: UUID,
-    session: AsyncSession = Depends(SessionDep),
-):
-    job = await get_job(session, job_id)
-    if job is None:
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason='Job not found')
+async def stream_job_status(websocket: WebSocket, job_id: UUID):
+    access = await websocket_access_context(websocket)
+    async with access_scoped_session_ctx(
+        session_factory=session_factory,
+        access_context=access,
+    ) as session:
+        job = await get_job(session, job_id)
+        if job is None:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason='Job not found')
 
-    await websocket.accept()
-    last_payload: dict[str, Any] | None = None
+        await websocket.accept()
+        last_payload: dict[str, Any] | None = None
 
-    try:
-        while True:
-            await session.refresh(job)
-            payload = _job_status_payload(job, websocket.url)
-            if payload != last_payload:
-                await websocket.send_json(payload)
-                last_payload = payload
+        try:
+            while True:
+                await session.refresh(job)
+                payload = _job_status_payload(job, websocket.url)
+                if payload != last_payload:
+                    await websocket.send_json(payload)
+                    last_payload = payload
 
-            if job.status in TERMINAL_STATUSES:
-                if websocket.application_state is WebSocketState.CONNECTED:
-                    await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
-                break
+                if job.status in TERMINAL_STATUSES:
+                    if websocket.application_state is WebSocketState.CONNECTED:
+                        await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                    break
 
-            await asyncio.sleep(JOB_STATUS_STREAM_POLL_INTERVAL)
-    except WebSocketDisconnect:
-        # Client closed the connection; nothing more to do.
-        pass
+                await asyncio.sleep(JOB_STATUS_STREAM_POLL_INTERVAL)
+        except WebSocketDisconnect:
+            # Client closed the connection; nothing more to do.
+            pass
 
 
 @router.delete(

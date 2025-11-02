@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import base64
-import json
 from typing import Iterator
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 from tenauth.schemas import AccessContext, AuthContext
+from tenauth.utils import create_bearer_token
 
 from core.db import scoped_session
 from main import app
@@ -41,31 +40,6 @@ async def _set_job_status(job_id: UUID, status: JobStatus, access: AccessContext
             job.started_at = now
         if status in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}:
             job.finished_at = now
-
-
-def make_bearer_token(ctx: AuthContext) -> str:
-    """Return a JWT-like Bearer token (no signature) from an AuthContext."""
-    header = {'alg': 'none'}
-    payload = {
-        'sub': str(ctx.sub),
-        'tid': str(ctx.tid),
-        'role': ctx.role,
-        'scopes': ctx.scopes,
-        'plan': ctx.plan,
-        'iat': ctx.iat,
-        'exp': ctx.exp,
-        'iss': ctx.iss,
-        'aud': ctx.aud,
-    }
-    # remove None values
-    payload = {k: v for k, v in payload.items() if v is not None}
-
-    def b64(data: dict) -> str:
-        raw = json.dumps(data, separators=(',', ':')).encode()
-        return base64.urlsafe_b64encode(raw).decode().rstrip('=')
-
-    token = f'{b64(header)}.{b64(payload)}.'
-    return f'Bearer {token}'
 
 
 ctx = AuthContext(
@@ -103,7 +77,7 @@ def test_job_status_stream_emits_updates(sync_client: TestClient) -> None:
         # Run entirely inside TestClient's AnyIO portal to avoid cross-loop sessions
         sync_client.portal.call(_advance_status, job_id, status, access)  # type: ignore[missing-attribute]
 
-    with sync_client.websocket_connect(stream_path, headers={'Authorization': make_bearer_token(ctx)}) as ws:
+    with sync_client.websocket_connect(stream_path, headers={'Authorization': create_bearer_token(ctx)}) as ws:
         first = ws.receive_json()
         assert first['status'] == JobStatus.QUEUED.value
 
