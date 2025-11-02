@@ -52,6 +52,7 @@ def _tool_call_args(tool_call: Any) -> Any:
     return args
 
 
+# todo: for normal retriever we must also include the retrieved chunks
 def _retrieved_first_chunks(messages: list[BaseMessage | AIMessage]) -> list[int]:
     """Return how many sequential `first_chunks` have already been requested."""
     retrieved = []
@@ -88,15 +89,20 @@ def type_extractor(state: State) -> Dict[str, Any]:
     return update
 
 
+# todo: we must run more targetet search, not this:
+# SEFE Storage GmbH Handelsregister Kassel HRB Registergericht Amtsgericht Kassel Registernummer Umfirmierung
+# vormals astora HRB 15690 Gewinnabführungsvertrag GAZPROM Germania Charlottenburg HRB 36569 Bekanntmachung
+# Datum
 def metadata_extractor(state: State) -> Dict[str, Any]:
     history = _history(state)
     retrieved = state.get('retrieved_chunks', [])
     retrieved_str = ', '.join([str(x) for x in retrieved])
+    field_list = metadata_fields_str(remove=['document_type'], fields=MetadataSchema.model_fields.keys())
     extraction_prompt = SystemMessage(
         content=(
             'You are an expert metadata extractor. Retrieve the most relevant document chunks excluding '
             'these chunk_ids: ' + retrieved_str + '. Then extract the '
-            'following metadata fields: ' + metadata_fields_str(remove=['document_type']) + '. '
+            'following metadata fields: ' + field_list + '. '
             'Ensure correct identification of the company name, even if it was renamed. '
         )
     )

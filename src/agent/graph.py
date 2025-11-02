@@ -60,7 +60,7 @@ if __name__ == '__main__':
     context = ContextSchema(
         digest=digest,
         collection_name='default',
-        tenant_id=UUID('319f8924-73f5-4028-9587-854f64d08a2d'),
+        tenant_id=UUID('f74c8bfb-6372-4f61-b7b7-f4ae7c0abfde'),
     )
 
     res = asyncio.run(graph.ainvoke({}, config={'configurable': context.model_dump()}))

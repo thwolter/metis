@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
-
-from agent.schemas import MetadataSchema
+from typing import Any, Dict, Iterable
 
 
 def non_negative_int(value: Any) -> int:
@@ -14,11 +12,11 @@ def non_negative_int(value: Any) -> int:
         return 0
 
 
-def metadata_fields_str(remove: list | None) -> str:
-    fields = list(MetadataSchema.model_fields.keys())
+def metadata_fields_str(remove: list | None, *, fields: Iterable[str]) -> str:
+    field_list = list(fields)
     if remove:
-        fields = list(filter(lambda x: x not in remove, fields))
-    return ', '.join(fields)
+        field_list = [x for x in field_list if x not in remove]
+    return ', '.join(field_list)
 
 
 def normalize_args(raw_args: Any) -> Dict[str, Any]:
