@@ -13,9 +13,9 @@ from tenauth.schemas import AccessContext
 
 from agent.graph import graph
 from agent.schemas import ContextSchema, MetadataSchema
+from core.broker import reset_broker
 from core.db import scoped_session
 from core.logging import configure_logging
-from core.queueing import setup_broker
 from metadata.models import Job, JobStatus, utc_now
 from metadata.service import (
     merge_metadata,
@@ -25,7 +25,7 @@ from metadata.service import (
 )
 
 configure_logging()
-setup_broker()
+reset_broker()
 logger = logging.getLogger(__name__)
 
 # Maintain a single background event loop so async DB resources stay tied to a live loop.

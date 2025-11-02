@@ -14,14 +14,14 @@ from core.config import get_settings
 
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
-_settings = get_settings()
 
 
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
-        url = _settings.async_postgres_url.get_secret_value()
-        _engine = create_async_engine(url, echo=_settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
+        settings = get_settings()
+        url = settings.async_postgres_url.get_secret_value()
+        _engine = create_async_engine(url, echo=settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
     return _engine
 
 
@@ -61,5 +61,10 @@ async def scoped_session(*, access_context: AccessContext, verify: bool = True) 
 
 
 async def pg_connect(tenant_id: UUID) -> asyncpg.Connection:
-    dsn = _settings.postgres_url.get_secret_value()
+    settings = get_settings()
+    dsn_secret = settings.postgres_url
+    if dsn_secret is None:
+        msg = 'postgres_url must be configured before opening a direct connection'
+        raise RuntimeError(msg)
+    dsn = dsn_secret.get_secret_value()
     return await asyncpg.connect(dsn=dsn, server_settings={'app.tenant_id': str(tenant_id)})

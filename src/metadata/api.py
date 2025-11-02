@@ -15,6 +15,7 @@ from metadata import tasks
 from metadata.models import Job, JobStatus
 from metadata.schemas import (
     CreateJobDTO,
+    DocumentSearchResponse,
     JobCancelResponse,
     JobCreatedResponse,
     JobStatusResponse,
@@ -26,14 +27,15 @@ from metadata.schemas import (
 from metadata.service import (
     cancel_job,
     create_job,
+    delete_document,
     fetch_document_metadata,
     get_job,
     manual_metadata_update,
+    search_documents,
 )
 
 router = APIRouter(
     prefix='/v1',
-    tags=['metadata'],
 )
 
 TERMINAL_STATUSES = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
@@ -61,11 +63,7 @@ async def _wait_for_completion(session: AsyncSession, *, job_id: UUID, wait_for_
     return None
 
 
-@router.post(
-    '/metadata',
-    response_model=JobCreatedResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-)
+@router.post('/metadata', response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED, tags=['Jobs'])
 async def create_metadata_job(
     payload: CreateJobDTO,
     request: Request,
@@ -92,6 +90,7 @@ async def create_metadata_job(
     '/documents/{document_id}/rebuild',
     response_model=JobCreatedResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    tags=['Jobs'],
 )
 async def rebuild_document_metadata(
     document_id: UUID,
@@ -110,7 +109,7 @@ async def rebuild_document_metadata(
     )
 
 
-@router.get('/jobs/{job_id}', response_model=JobStatusResponse, name='get_job_status')
+@router.get('/jobs/{job_id}', response_model=JobStatusResponse, name='get_job_status', tags=['Jobs'])
 async def get_job_status(job_id: UUID, request: Request, session: AsyncSession = Depends(SessionDep)):
     job = await get_job(session, job_id)
     if job is None:
@@ -136,7 +135,12 @@ async def get_job_status(job_id: UUID, request: Request, session: AsyncSession =
     )
 
 
-@router.delete('/jobs/{job_id}', response_model=JobCancelResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.delete(
+    '/jobs/{job_id}',
+    response_model=JobCancelResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=['Jobs'],
+)
 async def cancel_job_handler(job_id: UUID, session: AsyncSession = Depends(SessionDep)):
     job = await get_job(session, job_id)
     if job is None:
@@ -149,6 +153,7 @@ async def cancel_job_handler(job_id: UUID, session: AsyncSession = Depends(Sessi
     '/documents/{document_id}/metadata',
     response_model=MetadataVersionResponse,
     name='get_document_metadata',
+    tags=['Documents'],
 )
 async def get_document_metadata(
     document_id: UUID,
@@ -176,6 +181,7 @@ async def get_document_metadata(
 @router.put(
     '/documents/{document_id}/metadata',
     response_model=MetadataVersionResponse,
+    tags=['Documents'],
 )
 async def upsert_document_metadata(
     document_id: UUID,
@@ -197,3 +203,31 @@ async def upsert_document_metadata(
         extracted_on=record.extracted_on,
         metadata=metadata,
     )
+
+
+@router.delete(
+    '/documents/{document_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=['Documents'],
+)
+async def delete_document_handler(
+    document_id: UUID,
+    session: AsyncSession = Depends(SessionDep),
+    access: AccessContext = Depends(require_access_context),
+):
+    deleted = await delete_document(session, tenant_id=access.tenant_id, document_id=document_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Document not found')
+
+
+@router.get('/documents/search', response_model=DocumentSearchResponse, tags=['Documents'])
+async def search_document_metadata(
+    q: str = Query(..., min_length=1),
+    session: AsyncSession = Depends(SessionDep),
+    access: AccessContext = Depends(require_access_context),
+):
+    try:
+        document_ids = await search_documents(session, tenant_id=access.tenant_id, query=q)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return DocumentSearchResponse(document_ids=document_ids)

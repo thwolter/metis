@@ -10,9 +10,11 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from alembic import context
+from core import get_settings
 from metadata import models  # noqa: F401  # ensure models import for metadata
 
 config = context.config
+settings = get_settings()
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -21,13 +23,24 @@ project_root = Path(__file__).resolve().parent.parent
 migration_env_path = project_root / '.env'
 env_values = dotenv_values(migration_env_path) if migration_env_path.exists() else {}
 
-alembic_url = env_values.get('ALEMBIC_DATABASE_URL') or os.getenv('ALEMBIC_DATABASE_URL')
+alembic_url = os.getenv('ALEMBIC_DATABASE_URL') or env_values.get('ALEMBIC_DATABASE_URL')
 if alembic_url is None:
     raise RuntimeError(
         'ALEMBIC_DATABASE_URL must be defined in .env.migration or the environment for alembic migrations.'
     )
 
-config.set_main_option('sqlalchemy.url', alembic_url)
+
+def _normalize_sync_url(url: str) -> str:
+    # Trim accidental whitespace that can produce invalid DB names like "test "
+    url = url.strip()
+    if url.startswith('postgres://'):
+        url = url.replace('postgres://', 'postgresql://', 1)
+    if url.startswith('postgresql+asyncpg://'):
+        url = url.replace('postgresql+asyncpg://', 'postgresql+psycopg2://', 1)
+    return url
+
+
+config.set_main_option('sqlalchemy.url', _normalize_sync_url(alembic_url))
 
 target_metadata = SQLModel.metadata
 
@@ -40,7 +53,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         include_schemas=True,
         version_table='alembic_version',
-        version_table_schema='metadata',
+        version_table_schema=settings.db_schema,
     )
 
     with context.begin_transaction():
@@ -58,7 +71,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             include_schemas=True,
             version_table='alembic_version',
-            version_table_schema='metadata',
+            version_table_schema=settings.db_schema,
         )
 
         with context.begin_transaction():

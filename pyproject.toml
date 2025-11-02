@@ -45,6 +45,7 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "ruff>=0.14.0",
     "ssort>=0.15.0",
+    "testcontainers>=4.13.2",
     "typer>=0.19.2",
     "vulture>=2.14",
 ]
@@ -86,3 +87,17 @@ line-length = 120
 
 [tool.ruff.format]
 quote-style = "single"
+
+
+[tool.pytest.ini_options]
+# Limit discovery & keep noise low
+testpaths = ["tests"]
+norecursedirs = [".venv", "build", "dist", ".mypy_cache", ".ruff_cache", ".pytest_cache", "docs"]
+addopts = "-q -ra --tb=short --show-capture=no -p no:warnings"
+asyncio_mode = "auto"
+markers = [
+  "unit: fast unit tests; pure logic, no external services",
+  "integration: mark tests as integration tests that may access external services or resources",
+  "e2e: end-to-end tests",
+  "needs_openai: shorthand for requires_env('OPENAI_API_KEY')",
+]

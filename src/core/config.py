@@ -2,17 +2,19 @@ from functools import lru_cache
 from typing import Any, Literal
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 
-from .utils import load_version, parse_cors_origins
+from .utils import ValidatedSettings, load_version, parse_cors_origins
 
 
-class Settings(BaseSettings):
+class Settings(ValidatedSettings):
     model_config = SettingsConfigDict(
         env_file='.env',  # let pydantic-settings read .env
         case_sensitive=False,  # typical for envs
         extra='ignore',  # ignore unknown env vars
     )
+
+    required_keys = ['postgres_url', 'redis_url', 'openai_api_key', 'tavily_api_key']
 
     env: Literal['development', 'production', 'testing'] = 'production'
     app_name: str = 'Metis'
@@ -20,11 +22,11 @@ class Settings(BaseSettings):
     version: str = Field(default_factory=load_version)
     admin_email: str = 'support@riskary.de'
 
-    postgres_url: SecretStr
-    redis_url: SecretStr
+    postgres_url: SecretStr | None = None
+    redis_url: SecretStr | None = None
 
-    openai_api_key: SecretStr
-    tavily_api_key: SecretStr
+    openai_api_key: SecretStr | None = None
+    tavily_api_key: SecretStr | None = None
 
     log_level: Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'] = 'INFO'
     otlp_endpoint: str | None = None
@@ -34,6 +36,7 @@ class Settings(BaseSettings):
     otel_metrics_enabled: bool = True
     jwt_secret: SecretStr = SecretStr('dev-internal-token')
 
+    db_schema: str = 'metadata'
     pg_vector_schema: str = 'vectra'
 
     cors_allow_origins: tuple[str, ...] = ()
@@ -45,14 +48,18 @@ class Settings(BaseSettings):
 
     @field_validator('postgres_url', mode='before')
     @classmethod
-    def validate_postgres_url(cls, dsn: str) -> str:
-        if dsn.startswith('postgres://'):
-            return dsn.replace('postgres://', 'postgresql://', 1)
-        return dsn
+    def validate_postgres_url(cls, url: str) -> str:
+        if not url:
+            return url
+        if url.startswith('postgres://'):
+            return url.replace('postgres://', 'postgresql://', 1)
+        return url
 
     @property
     def async_postgres_url(self) -> SecretStr:
         # Convert postgresql:// to postgresql+asyncpg:// for async engine
+        if self.postgres_url is None:
+            return SecretStr('')
         url = self.postgres_url.get_secret_value()
         if url.startswith('postgresql://'):
             url = url.replace('postgresql://', 'postgresql+asyncpg://', 1)

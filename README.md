@@ -21,7 +21,7 @@ Metis is a FastAPI service that orchestrates document metadata extraction and cl
 - Application: `src/main.py` boots the FastAPI app, health probes, and routes under `/v1`.
 - Metadata domain: `src/metadata/` provides DTOs, SQLModel models, REST endpoints, and job orchestration helpers.
 - Agents: `src/agent/` defines the LangGraph pipeline that classifies documents and emits `MetadataSchema`.
-- Queueing: `src/core/queueing.py` wires Dramatiq to Redis; workers in `metadata/tasks.py` consume jobs.
+- Broker: `src/core/broker.py` wires Dramatiq to Redis; workers in `metadata/tasks.py` consume jobs.
 - Persistence: PostgreSQL + pgvector stores metadata versions (`metadata/models.py`) and LangChain collections.
 - Security: TenAuth access context middleware injects tenant/user IDs into every DB session.
 

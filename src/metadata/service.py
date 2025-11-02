@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from hashlib import sha256
 from typing import Sequence
 from uuid import UUID
@@ -17,7 +18,7 @@ from agent.schemas import ContextSchema, MetadataSchema
 from core.config import get_settings
 from core.db import pg_connect, scoped_session
 from core.logging import configure_logging
-from metadata.models import DocumentMetadata, Job, JobStatus, utc_now
+from metadata.models import Document, DocumentMetadata, Job, JobStatus, utc_now
 from metadata.schemas import CreateJobDTO
 from utils.vstore import VECTOR_SCHEMA, get_collection_uuid
 
@@ -25,6 +26,27 @@ configure_logging()
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+async def ensure_document(session: AsyncSession, *, tenant_id: UUID, document_id: UUID) -> Document:
+    document = await session.get(Document, (tenant_id, document_id))
+    if document is not None:
+        return document
+
+    document = Document(tenant_id=tenant_id, document_id=document_id)
+    session.add(document)
+    await session.flush()
+    return document
+
+
+@dataclass(frozen=True)
+class _QueryClause:
+    field: str | None
+    value: str
+
+
+_FIELD_ALIASES = {'tag': 'tags'}
+_METADATA_FIELDS = {name.lower(): name for name in MetadataSchema.model_fields}
 
 
 def _fingerprint_from_payload(payload: dict) -> str:
@@ -64,6 +86,8 @@ async def create_job(session: AsyncSession, dto: CreateJobDTO, *, access_context
     document_id = dto.resolved_document_id()
     ingestion_fingerprint = dto.idempotency_key or dto.context.digest
     tenant_id = access_context.tenant_id
+
+    await ensure_document(session, tenant_id=tenant_id, document_id=document_id)
 
     job = Job(
         tenant_id=tenant_id,
@@ -161,6 +185,8 @@ async def record_metadata_version(
     metadata: MetadataSchema | None,
     fingerprint: str | None = None,
 ) -> DocumentMetadata:
+    await ensure_document(session, tenant_id=tenant_id, document_id=document_id)
+
     version = await next_metadata_version(session, tenant_id, document_id)
 
     if metadata is None:
@@ -246,6 +272,21 @@ async def manual_metadata_update(
     return record
 
 
+async def delete_document(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    document_id: UUID,
+) -> bool:
+    document = await session.get(Document, (tenant_id, document_id))
+    if document is None:
+        return False
+
+    await session.delete(document)
+    await session.commit()
+    return True
+
+
 @asynccontextmanager
 async def _vectorstore_connection(tenant_id: UUID):
     conn = await pg_connect(tenant_id)
@@ -273,3 +314,94 @@ async def update_vecstore_metadata(context: ContextSchema, document_id: UUID, me
             await conn.execute(query, meta_payload, str(collection_uuid), context.digest)
     except Exception as e:  # noqa: BLE001 - best-effort update, log only
         logger.exception(f'Failed updating vecstore metadata for document {document_id}: {str(e)}')
+
+
+def _resolve_field(field: str) -> str:
+    key = field.strip().lower()
+    if not key:
+        raise ValueError('Filter field must not be empty')
+    key = _FIELD_ALIASES.get(key, key)
+    if key not in _METADATA_FIELDS:
+        raise ValueError(f'Unknown metadata field: {field}')
+    return _METADATA_FIELDS[key]
+
+
+def _parse_search_query(query: str) -> list[_QueryClause]:
+    if query is None:
+        raise ValueError('Query must not be empty')
+    tokens = [part.strip() for part in query.split('&') if part.strip()]
+    if not tokens:
+        raise ValueError('Query must not be empty')
+
+    clauses: list[_QueryClause] = []
+    for token in tokens:
+        if ':' in token:
+            field_part, value_part = token.split(':', 1)
+            field_name = _resolve_field(field_part)
+            value = value_part.strip()
+            if not value:
+                raise ValueError(f'Filter for "{field_part}" must include a value')
+            clauses.append(_QueryClause(field=field_name, value=value.lower()))
+        else:
+            clauses.append(_QueryClause(field=None, value=token.lower()))
+    return clauses
+
+
+def _value_matches(raw_value, expected: str) -> bool:
+    if raw_value is None:
+        return False
+    if isinstance(raw_value, list):
+        values = [item for item in raw_value if item is not None]
+    else:
+        values = [raw_value]
+
+    for value in values:
+        text = str(value).lower()
+        if expected in text:
+            return True
+    return False
+
+
+def _matches_any_field(payload: dict, expected: str) -> bool:
+    for field in _METADATA_FIELDS.values():
+        if _value_matches(payload.get(field), expected):
+            return True
+    return False
+
+
+def _payload_matches(payload: dict, clauses: list[_QueryClause]) -> bool:
+    for clause in clauses:
+        if clause.field is None:
+            if not _matches_any_field(payload, clause.value):
+                return False
+        else:
+            if not _value_matches(payload.get(clause.field), clause.value):
+                return False
+    return True
+
+
+async def search_documents(session: AsyncSession, *, tenant_id: UUID, query: str) -> list[UUID]:
+    clauses = _parse_search_query(query)
+
+    doc_meta_table = DocumentMetadata.__table__  # type: ignore[missing-attribute]
+    stmt = (
+        select(DocumentMetadata)
+        .where(DocumentMetadata.tenant_id == tenant_id)
+        .order_by(doc_meta_table.c.document_id, doc_meta_table.c.version.desc())
+    )
+    result = await session.exec(stmt)
+    records = result.all()
+
+    latest_by_document: dict[UUID, DocumentMetadata] = {}
+    for record in records:
+        if record.document_id not in latest_by_document:
+            latest_by_document[record.document_id] = record
+
+    matches: list[UUID] = []
+    for record in latest_by_document.values():
+        payload = record.payload or {}
+        if _payload_matches(payload, clauses):
+            matches.append(record.document_id)
+
+    matches.sort(key=lambda item: str(item))
+    return matches

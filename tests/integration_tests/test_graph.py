@@ -8,6 +8,7 @@ from agent.schemas import ContextSchema
 pytestmark = pytest.mark.anyio
 
 
+@pytest.mark.skip(reason='Consuming the api')
 @pytest.mark.langsmith
 async def test_agent_simple_passthrough() -> None:
     context = ContextSchema(

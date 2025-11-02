@@ -52,9 +52,11 @@ Validation errors (`422`) return an array of issues under `detail`.
 | DELETE | `/v1/jobs/{job_id}` | Request job cancellation. |
 | GET | `/v1/documents/{document_id}/metadata` | Fetch versioned metadata for a document. |
 | PUT | `/v1/documents/{document_id}/metadata` | Manually upsert metadata (bypasses agent). |
+| DELETE | `/v1/documents/{document_id}` | Remove a document together with its jobs and metadata versions. |
+| GET | `/v1/documents/search` | Search documents by metadata attributes. |
 | GET | `/healthz`, `/readyz` | Liveness and readiness probes (unauthenticated). |
 
-## Endpoint Details
+## Jobs
 
 ### POST `/v1/metadata`
 Create a metadata extraction job. Jobs are idempotent per `(tenant_id, document_id, profile, ingestion_fingerprint)`.
@@ -152,6 +154,8 @@ Request cancellation of an in-flight job. Completed jobs return their existing s
 - `401 Unauthorized`
 - `404 Not Found`
 
+## Documents
+
 ### GET `/v1/documents/{document_id}/metadata`
 Fetch a specific or latest metadata version.
 
@@ -209,6 +213,41 @@ Persist a manual metadata version without running the extraction agent. The back
 **Error responses**
 - `401 Unauthorized`
 - `422 Unprocessable Entity`
+
+### DELETE `/v1/documents/{document_id}`
+Delete a document and cascade-remove all related metadata versions and queued or historical jobs. Use this when a document leaves the corpus or must be reprocessed from scratch.
+
+**Success response**
+- `204 No Content`
+
+**Error responses**
+- `401 Unauthorized`
+- `404 Not Found` when the document is unknown.
+
+### GET `/v1/documents/search`
+Search the latest metadata version for each document within the authenticated tenant and return matching document IDs.
+
+**Query string**
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `q` | string | yes | Supports simple terms (`q=acme`), field filters (`q=company_name:acme inc`), and logical AND combinations using `&` (`q=acme & tag:finance`). Matching is case-insensitive and spans all metadata attributes when no field is specified. |
+
+**Success response**
+- `200 OK` with `DocumentSearchResponse`:
+
+```json
+{
+  "document_ids": [
+    "be9f6304-5ea1-4690-843b-7192617b61d4",
+    "4f3c6857-0405-454a-9695-b868aee81af7"
+  ]
+}
+```
+
+**Error responses**
+- `400 Bad Request` when the query is empty or references an unknown metadata field.
+- `401 Unauthorized`
 
 ## Health Probes
 - `GET /healthz` → `{"status": "ok"}`

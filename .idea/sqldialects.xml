@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="SqlDialectMappings">
-    <file url="file://$PROJECT_DIR$/docker/init/070_bootstrap.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/docker/init/080_embedding_permissions.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/070_metis_roles.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/080_metis_users.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/100_metis_schemas.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/105_search_path.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/110_embedding_permissions.sql" dialect="PostgreSQL" />
   </component>
 </project>

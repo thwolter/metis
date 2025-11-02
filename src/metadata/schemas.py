@@ -102,6 +102,10 @@ class JobCancelResponse(BaseModel):
     status: JobStatus
 
 
+class DocumentSearchResponse(BaseModel):
+    document_ids: list[UUID]
+
+
 VersionQuery = Annotated[
     str | None,
     StringConstraints(pattern=r'^(latest|v\d+)?$', max_length=16),
