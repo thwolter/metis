@@ -50,6 +50,7 @@ Validation errors (`422`) return an array of issues under `detail`.
 | POST | `/v1/documents/{document_id}/rebuild` | Rebuild metadata for an existing document. |
 | GET | `/v1/jobs/{job_id}` | Retrieve job status (and result link when ready). |
 | DELETE | `/v1/jobs/{job_id}` | Request job cancellation. |
+| WS | `/v1/jobs/{job_id}/stream` | Subscribe to live job status updates. |
 | GET | `/v1/documents/{document_id}/metadata` | Fetch versioned metadata for a document. |
 | PUT | `/v1/documents/{document_id}/metadata` | Manually upsert metadata (bypasses agent). |
 | DELETE | `/v1/documents/{document_id}` | Remove a document together with its jobs and metadata versions. |
@@ -153,6 +154,41 @@ Request cancellation of an in-flight job. Completed jobs return their existing s
 **Error responses**
 - `401 Unauthorized`
 - `404 Not Found`
+
+### WS `/v1/jobs/{job_id}/stream`
+Open a WebSocket connection to receive status updates whenever a job changes state. Messages are JSON objects matching `JobStatusResponse`.
+
+**Authentication**
+- Preferred: send `Authorization: Bearer <jwt>` during the WebSocket handshake.
+- Alternative: provide `?access_token=<jwt>` (or `?token=`) on the query string.
+- For WebSocket clients that require subprotocols, include `Sec-WebSocket-Protocol: access_token=<jwt>`.
+
+Requests without a valid token are closed with code `1008` and a descriptive reason.
+
+**Message flow**
+- The server accepts the connection only if the job exists; otherwise it returns a `1008` `Job not found` close.
+- On connect, the first payload mirrors `GET /v1/jobs/{job_id}`.
+- Subsequent payloads are sent whenever the job record changes; idle periods are polled roughly every 500 ms.
+- After the job reaches a terminal state (`succeeded`, `failed`, `canceled`), the server closes the socket with code `1000` (normal closure). Clients may also close the connection at any time.
+
+**Example payload**
+
+```json
+{
+  "job_id": "4f3c6857-0405-454a-9695-b868aee81af7",
+  "document_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
+  "tenant_id": "22a4c3b4-6c1a-4f75-8a3a-63f0d5c2279a",
+  "status": "running",
+  "retries": 0,
+  "priority": 5,
+  "created_at": "2024-02-16T09:55:03.144Z",
+  "started_at": "2024-02-16T09:55:05.421Z",
+  "finished_at": null,
+  "error_type": null,
+  "error_msg": null,
+  "result_url": null
+}
+```
 
 ## Documents
 

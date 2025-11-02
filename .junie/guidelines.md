@@ -55,6 +55,6 @@
 
 ## Commit Message Standard
 
-Follow [Conventional Commits](https://www.conventionalcommits.org/) with concise, professional wording.
+Follow [Conventional Commits](https://www.conventionalcommits.org/) with concise, professional wording and without trailing **
 
 ### Format
