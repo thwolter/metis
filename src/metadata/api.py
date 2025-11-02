@@ -2,14 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    WebSocketException,
+    status,
+)
 from sqlmodel.ext.asyncio.session import AsyncSession
-from tenauth.fastapi import require_access_context
-from tenauth.schemas import AccessContext
+from starlette.datastructures import URL
+from starlette.websockets import WebSocketState
+from tenauth.fastapi import access_scoped_session_ctx, require_access_context
+from tenauth.schemas import AccessContext, AuthContext
 
 from agent.schemas import MetadataSchema
+from core.db import session_factory
 from core.deps import SessionDep
 from metadata import tasks
 from metadata.models import Job, JobStatus
@@ -39,15 +53,20 @@ router = APIRouter(
 )
 
 TERMINAL_STATUSES = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
+JOB_STATUS_STREAM_POLL_INTERVAL = 0.5
 
 
 def _status_url(request: Request, job_id: UUID) -> str:
     return str(request.url_for('get_job_status', job_id=str(job_id)))
 
 
-def _result_url(request: Request, document_id: UUID, version: str = 'latest') -> str:
-    url = request.url_for('get_document_metadata', document_id=str(document_id))
-    return f'{url}?version={version}'
+def _result_url(base_url: URL, document_id: UUID, version: str = 'latest') -> str:
+    path = router.url_path_for('get_document_metadata', document_id=str(document_id))
+    scheme = base_url.scheme
+    if scheme in {'ws', 'wss'}:
+        scheme = 'https' if scheme == 'wss' else 'http'
+    target = base_url.replace(path=str(path), query=None, scheme=scheme)
+    return str(target.include_query_params(version=version))
 
 
 async def _wait_for_completion(session: AsyncSession, *, job_id: UUID, wait_for_secs: int) -> Job | None:
@@ -61,6 +80,66 @@ async def _wait_for_completion(session: AsyncSession, *, job_id: UUID, wait_for_
         if job and job.status in TERMINAL_STATUSES:
             return job
     return None
+
+
+def _job_status_payload(job: Job, base_url: URL) -> dict[str, Any]:
+    result_url = None
+    if job.status == JobStatus.SUCCEEDED:
+        result_url = _result_url(base_url, job.document_id)
+
+    payload = JobStatusResponse(
+        job_id=job.job_id,
+        document_id=job.document_id,
+        tenant_id=job.tenant_id,
+        status=job.status,
+        retries=job.retries,
+        priority=job.priority,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        error_type=job.error_type,
+        error_msg=job.error_msg,
+        result_url=result_url,
+    )
+    return payload.model_dump(mode='json')
+
+
+async def websocket_access_context(websocket: WebSocket) -> AccessContext:
+    token: str | None = None
+    authorization = websocket.headers.get('Authorization')
+
+    if authorization:
+        scheme, _, credentials = authorization.partition(' ')
+        if scheme.lower() != 'bearer' or not credentials:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason='Invalid authorization header')
+        token = credentials.strip()
+    else:
+        query_token = websocket.query_params.get('access_token') or websocket.query_params.get('token')
+        if query_token:
+            token = query_token.strip()
+        else:
+            protocols = websocket.headers.get('Sec-WebSocket-Protocol', '')
+            for candidate in protocols.split(','):
+                candidate = candidate.strip()
+                if candidate.startswith('access_token='):
+                    token = candidate.split('=', 1)[1].strip()
+                    break
+
+    if not token:
+        raise WebSocketException(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason='Missing authentication token',
+        )
+
+    if token.lower().startswith('bearer '):
+        token = token.split(' ', 1)[1].strip()
+
+    try:
+        auth_context = AuthContext.from_token(token)
+    except HTTPException as exc:
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail) from exc
+
+    return AccessContext(tenant_id=auth_context.tid, user_id=auth_context.sub)
 
 
 @router.post('/metadata', response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED, tags=['Jobs'])
@@ -82,7 +161,7 @@ async def create_metadata_job(
 
     awaited_job = await _wait_for_completion(session, job_id=job.job_id, wait_for_secs=wait_for_secs)
     if awaited_job and awaited_job.status == JobStatus.SUCCEEDED:
-        response.result_url = _result_url(request, awaited_job.document_id)
+        response.result_url = _result_url(request.url, awaited_job.document_id)
     return response
 
 
@@ -117,7 +196,7 @@ async def get_job_status(job_id: UUID, request: Request, session: AsyncSession =
 
     result_url = None
     if job.status == JobStatus.SUCCEEDED:
-        result_url = _result_url(request, job.document_id)
+        result_url = _result_url(request.url, job.document_id)
 
     return JobStatusResponse(
         job_id=job.job_id,
@@ -133,6 +212,40 @@ async def get_job_status(job_id: UUID, request: Request, session: AsyncSession =
         error_msg=job.error_msg,
         result_url=result_url,
     )
+
+
+@router.websocket('/jobs/{job_id}/stream', name='stream_job_status')
+async def stream_job_status(
+    websocket: WebSocket,
+    job_id: UUID,
+    access: AccessContext = Depends(websocket_access_context),
+):
+    async with access_scoped_session_ctx(session_factory=session_factory, access_context=access) as session:
+        job = await get_job(session, job_id)
+        if job is None:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason='Job not found')
+
+        await websocket.accept()
+
+        last_payload: dict[str, Any] | None = None
+
+        try:
+            while True:
+                await session.refresh(job)
+                payload = _job_status_payload(job, websocket.url)
+                if payload != last_payload:
+                    await websocket.send_json(payload)
+                    last_payload = payload
+
+                if job.status in TERMINAL_STATUSES:
+                    if websocket.application_state is WebSocketState.CONNECTED:
+                        await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                    break
+
+                await asyncio.sleep(JOB_STATUS_STREAM_POLL_INTERVAL)
+        except WebSocketDisconnect:
+            # Client closed the connection; nothing more to do.
+            pass
 
 
 @router.delete(

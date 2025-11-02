@@ -8,6 +8,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from sqlalchemy.engine import make_url
 from tenauth.fastapi import require_access_context, require_auth
@@ -19,6 +20,7 @@ from core import db as core_db
 from core.config import get_settings
 from core.db import scoped_session
 from main import app as main_app
+from metadata.api import websocket_access_context
 from tests.db import (  # type: ignore[missing-import]
     prepare_database,
     reset_database_state,
@@ -34,6 +36,20 @@ DEFAULT_ENV_VARS = {
     'ENV': 'testing',
     'DOCUMENT_STORE': 'local',
 }
+
+
+class AuthenticatedTestClient:
+    """Wrapper merging async HTTP support with synchronous WebSocket helpers."""
+
+    def __init__(self, async_client: AsyncClient, websocket_client: TestClient) -> None:
+        self._async_client = async_client
+        self._websocket_client = websocket_client
+
+    def websocket_connect(self, *args, **kwargs):
+        return self._websocket_client.websocket_connect(*args, **kwargs)
+
+    def __getattr__(self, item: str):
+        return getattr(self._async_client, item)
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -151,6 +167,11 @@ def override_auth_dependencies():
 
     app.dependency_overrides[require_auth] = _fake_get_current_auth
     app.dependency_overrides[require_access_context] = _fake_get_access_context
+
+    async def _fake_websocket_access_context(*_: object, **__: object) -> AccessContext:
+        return AccessContext(tenant_id=tenant_id, user_id=user_id)
+
+    app.dependency_overrides[websocket_access_context] = _fake_websocket_access_context
     yield
     app.dependency_overrides.clear()
 
