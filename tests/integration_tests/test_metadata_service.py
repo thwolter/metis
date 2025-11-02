@@ -5,6 +5,7 @@ from uuid import UUID
 from tenauth.schemas import AccessContext
 
 from agent.schemas import MetadataSchema
+from metadata.models import JobStatus
 from metadata.schemas import CreateJobDTO, JobContextPayload
 from metadata.service import (
     create_job,
@@ -15,6 +16,7 @@ from metadata.service import (
     merge_metadata,
     metadata_fingerprint,
     record_metadata_version,
+    set_job_status,
 )
 
 
@@ -210,3 +212,11 @@ async def test_manual_metadata_update_skips_duplicate_payload(auth_session):
     )
 
     assert first.version == second.version == 1
+
+
+async def test_set_status_to_failed(auth_session):
+    dto = _dto()
+    access = AccessContext.from_session(auth_session)
+    job = await create_job(auth_session, dto, access_context=access)
+    updated_job = await set_job_status(auth_session, job, JobStatus.FAILED)
+    assert updated_job.status == JobStatus.FAILED

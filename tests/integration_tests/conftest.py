@@ -188,3 +188,9 @@ async def auth_client() -> AsyncGenerator[AsyncClient]:
         transport = httpx.ASGITransport(app=main_app)
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             yield client
+
+
+@pytest.fixture(scope='session')
+def sync_client() -> TestClient:
+    """Synchronous TestClient for WebSocket and in-process tests."""
+    return TestClient(main_app)

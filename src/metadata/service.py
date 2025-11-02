@@ -137,6 +137,19 @@ async def cancel_job(session: AsyncSession, job: Job) -> Job:
     return job
 
 
+async def set_job_status(session: AsyncSession, job: Job, status: JobStatus) -> Job:
+    if job.status == status:
+        return job
+    job.status = status
+    if status == JobStatus.SUCCEEDED:
+        job.finished_at = utc_now()
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    session.expunge(job)
+    return job
+
+
 def merge_metadata(
     *,
     base: MetadataSchema | None,

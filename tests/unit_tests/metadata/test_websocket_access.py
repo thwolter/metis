@@ -27,7 +27,7 @@ async def test_websocket_access_context_accepts_query_token(monkeypatch: pytest.
     monkeypatch.setattr('metadata.api.AuthContext.from_token', lambda token: expected)
 
     websocket = DummyWebSocket(query={'access_token': 'token-from-query'})
-    access = await websocket_access_context(websocket)
+    access = await websocket_access_context(websocket)  # type: ignore[bad-argument-type]
 
     assert isinstance(access, AccessContext)
     assert access.user_id == expected.sub
@@ -50,7 +50,7 @@ async def test_websocket_access_context_accepts_subprotocol_token(monkeypatch: p
     monkeypatch.setattr('metadata.api.AuthContext.from_token', fake_from_token)
 
     websocket = DummyWebSocket(headers={'Sec-WebSocket-Protocol': 'chat, access_token=subprotocol-token'})
-    access = await websocket_access_context(websocket)
+    access = await websocket_access_context(websocket)  # type: ignore[bad-argument-type]
 
     assert access.user_id == expected.sub
     assert access.tenant_id == expected.tid
@@ -72,7 +72,7 @@ async def test_websocket_access_context_strips_bearer_prefix(monkeypatch: pytest
     monkeypatch.setattr('metadata.api.AuthContext.from_token', fake_from_token)
 
     websocket = DummyWebSocket(query={'token': 'Bearer trimmed-token'})
-    access = await websocket_access_context(websocket)
+    access = await websocket_access_context(websocket)  # type: ignore[bad-argument-type]
 
     assert access.user_id == expected.sub
     assert access.tenant_id == expected.tid
