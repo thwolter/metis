@@ -1,3 +1,9 @@
+## 0.4.1 (2025-11-02)
+
+### Refactor
+
+- **tests + metadata**: replace custom token/auth context utils with shared functions
+
 ## 0.4.0 (2025-11-02)
 
 ### Feat
