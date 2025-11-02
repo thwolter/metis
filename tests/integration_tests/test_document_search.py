@@ -32,6 +32,7 @@ async def test_simple_query_matches_any_field(auth_client):
     assert response.status_code == 200
     body = response.json()
     assert body['document_ids'] == [str(doc_a)]
+    assert body['digests'] == [None]
 
 
 async def test_filter_query_matches_specific_field(auth_client):
@@ -59,6 +60,7 @@ async def test_filter_query_matches_specific_field(auth_client):
     assert response.status_code == 200
     body = response.json()
     assert body['document_ids'] == [str(doc_a)]
+    assert body['digests'] == [None]
 
 
 async def test_combined_filters_apply_and_logic(auth_client):
@@ -86,6 +88,7 @@ async def test_combined_filters_apply_and_logic(auth_client):
     assert response.status_code == 200
     body = response.json()
     assert body['document_ids'] == [str(doc_a)]
+    assert body['digests'] == [None]
 
 
 async def test_unknown_field_returns_bad_request(auth_client):

@@ -225,7 +225,7 @@ Delete a document and cascade-remove all related metadata versions and queued or
 - `404 Not Found` when the document is unknown.
 
 ### GET `/v1/documents/search`
-Search the latest metadata version for each document within the authenticated tenant and return matching document IDs.
+Search the latest metadata version for each document within the authenticated tenant and return matching document IDs alongside their associated digests (if available).
 
 **Query string**
 
@@ -241,6 +241,10 @@ Search the latest metadata version for each document within the authenticated te
   "document_ids": [
     "be9f6304-5ea1-4690-843b-7192617b61d4",
     "4f3c6857-0405-454a-9695-b868aee81af7"
+  ],
+  "digests": [
+    "62uQY2qCT0ntviGct1xQ6lZvKR7p0mDFNOYYJrmzEqs=",
+    null
   ]
 }
 ```

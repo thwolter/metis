@@ -227,7 +227,9 @@ async def search_document_metadata(
     access: AccessContext = Depends(require_access_context),
 ):
     try:
-        document_ids = await search_documents(session, tenant_id=access.tenant_id, query=q)
+        matches = await search_documents(session, tenant_id=access.tenant_id, query=q)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return DocumentSearchResponse(document_ids=document_ids)
+    document_ids = [document_id for document_id, _ in matches]
+    digests = [digest for _, digest in matches]
+    return DocumentSearchResponse(document_ids=document_ids, digests=digests)

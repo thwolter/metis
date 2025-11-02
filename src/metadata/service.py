@@ -380,7 +380,7 @@ def _payload_matches(payload: dict, clauses: list[_QueryClause]) -> bool:
     return True
 
 
-async def search_documents(session: AsyncSession, *, tenant_id: UUID, query: str) -> list[UUID]:
+async def search_documents(session: AsyncSession, *, tenant_id: UUID, query: str) -> list[tuple[UUID, str | None]]:
     clauses = _parse_search_query(query)
 
     doc_meta_table = DocumentMetadata.__table__  # type: ignore[missing-attribute]
@@ -397,11 +397,29 @@ async def search_documents(session: AsyncSession, *, tenant_id: UUID, query: str
         if record.document_id not in latest_by_document:
             latest_by_document[record.document_id] = record
 
-    matches: list[UUID] = []
+    digests_by_doc: dict[UUID, str] = {}
+    if latest_by_document:
+        fingerprints = {doc_id: record.fingerprint for doc_id, record in latest_by_document.items()}
+        doc_ids = list(fingerprints.keys())
+        job_table = Job.__table__  # type: ignore[missing-attribute]
+        stmt = (
+            select(job_table.c.document_id, job_table.c.processing_fingerprint, job_table.c.document_digest)
+            .where(job_table.c.tenant_id == tenant_id)
+            .where(job_table.c.document_id.in_(doc_ids))
+            .where(job_table.c.processing_fingerprint.in_(list(fingerprints.values())))
+        )
+        result = await session.exec(stmt)
+        for doc_id, processing_fingerprint, document_digest in result.all():
+            expected = fingerprints.get(doc_id)
+            if processing_fingerprint == expected:
+                digests_by_doc[doc_id] = document_digest
+
+    matches: list[tuple[UUID, str | None]] = []
     for record in latest_by_document.values():
         payload = record.payload or {}
         if _payload_matches(payload, clauses):
-            matches.append(record.document_id)
+            digest = payload.get('digest') or digests_by_doc.get(record.document_id)
+            matches.append((record.document_id, digest))
 
-    matches.sort(key=lambda item: str(item))
+    matches.sort(key=lambda item: str(item[0]))
     return matches

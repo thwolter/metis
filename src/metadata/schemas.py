@@ -4,7 +4,14 @@ import datetime as dt
 from typing import Annotated
 from uuid import UUID, uuid5
 
-from pydantic import AnyHttpUrl, BaseModel, Field, StringConstraints, conint
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    Field,
+    StringConstraints,
+    conint,
+    model_validator,
+)
 
 from agent.schemas import ContextSchema, MetadataSchema
 from metadata.models import JobStatus
@@ -104,6 +111,13 @@ class JobCancelResponse(BaseModel):
 
 class DocumentSearchResponse(BaseModel):
     document_ids: list[UUID]
+    digests: list[SHA256B64 | None]
+
+    @model_validator(mode='after')
+    def _validate_lengths(self) -> 'DocumentSearchResponse':
+        if len(self.document_ids) != len(self.digests):
+            raise ValueError('document_ids and digests must have the same length')
+        return self
 
 
 VersionQuery = Annotated[
