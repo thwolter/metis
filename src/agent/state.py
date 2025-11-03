@@ -5,14 +5,8 @@ from typing_extensions import Annotated, TypedDict
 from .schemas import MetadataSchema
 
 
-def _prefer_metadata(current: MetadataSchema | None, value: MetadataSchema | None) -> MetadataSchema | None:
-    """Reducer that prefers the most recent non-null metadata bundle."""
-    return value or current
-
-
 class State(TypedDict, total=False):
     """Graph state tracking conversation history and metadata extraction."""
 
     messages: Annotated[list[AnyMessage], add_messages]
     metadata: MetadataSchema
-    retrieved_chunks: Annotated[list[int], lambda a, b: a + b]

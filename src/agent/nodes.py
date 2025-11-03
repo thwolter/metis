@@ -4,13 +4,13 @@ import json
 from typing import Any, Dict
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.runnables import Runnable
 
+from .helper import metadata_fields_str
 from .schemas import MetadataSchema
 from .state import State
 from .tools import first_chunks, retriever
-from .utils import metadata_fields_str, non_negative_int, normalize_args
 
 type RunnableMsg = Runnable
 
@@ -29,45 +29,6 @@ def _history(state: State) -> list[BaseMessage]:
     return list(state.get('messages', []))
 
 
-def _metadata_message(metadata: MetadataSchema) -> AIMessage:
-    """Create a message that records the structured metadata in the transcript."""
-    return AIMessage(content=metadata.model_dump_json(indent=2))
-
-
-def _tool_call_name(tool_call: Any) -> str | None:
-    if isinstance(tool_call, dict):
-        return tool_call.get('name')
-    return getattr(tool_call, 'name', None)
-
-
-def _tool_call_args(tool_call: Any) -> Any:
-    if isinstance(tool_call, dict):
-        if 'args' in tool_call:
-            return tool_call['args']
-        if 'arguments' in tool_call:
-            return tool_call['arguments']
-    args = getattr(tool_call, 'args', None)
-    if args is None:
-        args = getattr(tool_call, 'arguments', None)
-    return args
-
-
-# todo: for normal retriever we must also include the retrieved chunks
-def _retrieved_first_chunks(messages: list[BaseMessage | AIMessage]) -> list[int]:
-    """Return how many sequential `first_chunks` have already been requested."""
-    retrieved = []
-    for message in messages:
-        tool_calls = getattr(message, 'tool_calls', None) or []
-        for tool_call in tool_calls:
-            if _tool_call_name(tool_call) != 'first_chunks':
-                continue
-            args = normalize_args(_tool_call_args(tool_call))
-            k = non_negative_int(args.get('k'))
-            skip = non_negative_int(args.get('skip'))
-            retrieved = retrieved + list(range(skip, skip + k))
-    return retrieved
-
-
 def type_extractor(state: State) -> Dict[str, Any]:
     sys_msg = SystemMessage(
         content=(
@@ -80,13 +41,7 @@ def type_extractor(state: State) -> Dict[str, Any]:
     )
     history = _history(state)
     result = llm_extract.invoke([sys_msg] + history)
-    update: Dict[str, Any] = {'messages': [result]}
-
-    if getattr(result, 'tool_calls', None):
-        return update
-
-    update['retrieved_chunks'] = _retrieved_first_chunks(history)
-    return update
+    return {'messages': [result]}
 
 
 # todo: we must run more targetet search, not this:
@@ -95,8 +50,7 @@ def type_extractor(state: State) -> Dict[str, Any]:
 # Datum
 def metadata_extractor(state: State) -> Dict[str, Any]:
     history = _history(state)
-    retrieved = state.get('retrieved_chunks', [])
-    retrieved_str = ', '.join([str(x) for x in retrieved])
+    retrieved_str = ''
     field_list = metadata_fields_str(remove=['document_type'], fields=MetadataSchema.model_fields.keys())
     extraction_prompt = SystemMessage(
         content=(

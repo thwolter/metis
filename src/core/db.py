@@ -67,4 +67,5 @@ async def pg_connect(tenant_id: UUID) -> asyncpg.Connection:
         msg = 'postgres_url must be configured before opening a direct connection'
         raise RuntimeError(msg)
     dsn = dsn_secret.get_secret_value()
+    dsn = dsn.replace('+asyncpg://', '://', 1)
     return await asyncpg.connect(dsn=dsn, server_settings={'app.tenant_id': str(tenant_id)})

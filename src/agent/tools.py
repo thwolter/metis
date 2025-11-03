@@ -15,23 +15,7 @@ from .schemas import ContextSchema
 settings = get_settings()
 
 
-@tool('first_chunks')
-async def first_chunks(
-    config: RunnableConfig,
-    k: int = 3,
-    skip: int = 0,
-) -> Document:
-    """Fetch the next `k` chunks for the current digest via SQL, ordered by chunk id and return as a single document."""
-
-    context = ContextSchema.model_validate(config['configurable'])
-    if not context.digest or not context.collection_name:
-        return Document(page_content='')
-
-    limit = max(int(k), 0)
-    offset = max(int(skip), 0)
-    if limit == 0:
-        return Document(page_content='')
-
+async def get_rows(limit: int, *, context: ContextSchema, offset: int = 0) -> list:
     conn = await pg_connect(tenant_id=context.tenant_id)
     try:
         collection_uuid = await get_collection_uuid(conn, context.collection_name)
@@ -46,7 +30,26 @@ async def first_chunks(
         rows = await conn.fetch(query, collection_uuid, context.digest, limit, offset)
     finally:
         await conn.close()
+    return rows
 
+
+@tool('first_chunks')
+async def first_chunks(
+    config: RunnableConfig,
+    k: int = 3,
+    skip: int = 0,
+) -> Document:
+    """Fetch the next `k` chunks for the current digest via SQL, ordered by chunk id and return as a single document."""
+
+    context = ContextSchema.model_validate(config['configurable'])
+    if not context.digest or not context.collection_name:
+        return Document(page_content='')
+
+    offset = max(int(skip), 0)
+    if limit := max(int(k), 0) == 0:
+        return Document(page_content='')
+
+    rows = await get_rows(limit, context=context, offset=offset)
     if not rows:
         return Document(page_content='')
 
