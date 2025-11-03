@@ -10,8 +10,13 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from alembic import context
+from classification import (  # noqa: F401  # ensure models import for metadata
+    models as classification_models,
+)
 from core import get_settings
-from metadata import models  # noqa: F401  # ensure models import for metadata
+from metadata import (  # noqa: F401  # ensure models import for metadata
+    models as metadata_models,
+)
 
 config = context.config
 settings = get_settings()

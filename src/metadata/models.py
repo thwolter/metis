@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlmodel import Field, Relationship, SQLModel
 
 from core import get_settings
-from metadata.fields import (
+from utils.fields import (
     created_at_field,
     created_by_field,
     updated_at_field,
