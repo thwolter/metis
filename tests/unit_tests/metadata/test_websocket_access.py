@@ -5,8 +5,7 @@ from uuid import UUID
 import pytest
 from starlette.datastructures import Headers, QueryParams
 from tenauth.schemas import AccessContext, AuthContext
-
-from metadata.api import websocket_access_context
+from tenauth.websocket import websocket_access_context
 
 
 class DummyWebSocket:
@@ -24,7 +23,10 @@ async def test_websocket_access_context_accepts_query_token(monkeypatch: pytest.
         scopes=['*'],
     )
 
-    monkeypatch.setattr('metadata.api.AuthContext.from_token', lambda token: expected)
+    monkeypatch.setattr(
+        'tenauth.schemas.AuthContext.from_token',
+        classmethod(lambda _cls, token: expected),
+    )
 
     websocket = DummyWebSocket(query={'access_token': 'token-from-query'})
     access = await websocket_access_context(websocket)  # type: ignore[bad-argument-type]
@@ -43,11 +45,14 @@ async def test_websocket_access_context_accepts_subprotocol_token(monkeypatch: p
         scopes=['*'],
     )
 
-    def fake_from_token(token: str) -> AuthContext:
+    def fake_from_token(_cls: type[AuthContext], token: str) -> AuthContext:
         assert token == 'subprotocol-token'
         return expected
 
-    monkeypatch.setattr('metadata.api.AuthContext.from_token', fake_from_token)
+    monkeypatch.setattr(
+        'tenauth.schemas.AuthContext.from_token',
+        classmethod(fake_from_token),
+    )
 
     websocket = DummyWebSocket(headers={'Sec-WebSocket-Protocol': 'chat, access_token=subprotocol-token'})
     access = await websocket_access_context(websocket)  # type: ignore[bad-argument-type]
@@ -65,11 +70,14 @@ async def test_websocket_access_context_strips_bearer_prefix(monkeypatch: pytest
         scopes=['*'],
     )
 
-    def fake_from_token(token: str) -> AuthContext:
+    def fake_from_token(_cls: type[AuthContext], token: str) -> AuthContext:
         assert token == 'trimmed-token'
         return expected
 
-    monkeypatch.setattr('metadata.api.AuthContext.from_token', fake_from_token)
+    monkeypatch.setattr(
+        'tenauth.schemas.AuthContext.from_token',
+        classmethod(fake_from_token),
+    )
 
     websocket = DummyWebSocket(query={'token': 'Bearer trimmed-token'})
     access = await websocket_access_context(websocket)  # type: ignore[bad-argument-type]
