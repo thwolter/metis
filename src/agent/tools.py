@@ -46,7 +46,8 @@ async def first_chunks(
         return Document(page_content='')
 
     offset = max(int(skip), 0)
-    if limit := max(int(k), 0) == 0:
+    limit = max(int(k), 0)
+    if limit == 0:
         return Document(page_content='')
 
     rows = await get_rows(limit, context=context, offset=offset)
