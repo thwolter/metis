@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-from urllib.parse import urlparse
 from uuid import UUID
 
 import pytest
@@ -12,6 +9,8 @@ from langchain_core.runnables.config import RunnableConfig
 
 from agent.schemas import ContextSchema
 from agent.tools import first_chunks, get_rows, retriever
+
+from ..utils import load_fixtures  # type: ignore[missing-import]
 
 
 def _config_for_context(context: ContextSchema) -> RunnableConfig:
@@ -27,28 +26,10 @@ def _default_context() -> ContextSchema:
     )
 
 
-def _load_fixtures(name: str):
-    def _extract_host_port(dsn: str) -> tuple[str, int | None]:
-        parsed = urlparse(dsn)
-        host = parsed.hostname or 'localhost'
-        port = parsed.port
-        return host, port
-
-    host, port = _extract_host_port(os.environ['POSTGRES_URL'])
-    env = os.environ.copy()
-    env['PGPASSWORD'] = 'test'
-
-    subprocess.run(
-        ['psql', '-h', str(host), '-p', str(port), '-U', 'test', '-d', 'test', '-f', name],
-        check=True,
-        env=env,
-    )
-
-
 @pytest.fixture(scope='session', autouse=True)
 def load_vectra_data():
-    _load_fixtures('tests/fixtures/vectra_roles.sql')
-    _load_fixtures('tests/fixtures/vectra_fixtures.sql')
+    load_fixtures('vectra_roles.sql')
+    load_fixtures('vectra_fixtures.sql')
 
 
 async def test_get_rows_returns_expected_rows() -> None:

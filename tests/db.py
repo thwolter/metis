@@ -12,6 +12,7 @@ from alembic import command
 from alembic.config import Config
 from core import db as core_db
 from core.config import get_settings
+from tests.utils import load_fixtures  # type: ignore[missing-import]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INIT_SQL_DIR = PROJECT_ROOT / 'docker' / 'init'
@@ -105,16 +106,8 @@ async def _execute_sql_scripts(connection_url: URL, directory: Path) -> None:
     if not directory.exists():
         return
 
-    engine = create_async_engine(connection_url)
-    try:
-        async with AsyncSession(engine) as session:
-            for sql_path in sorted(directory.glob('*.sql')):
-                sql_text = _filter_psql_directives(sql_path.read_text())
-                if sql_text.strip():
-                    await session.exec(text(sql_text))  # type: ignore[no-matching-overload]
-                    await session.commit()
-    finally:
-        await engine.dispose()
+    for sql_path in sorted(directory.glob('*.sql')):
+        load_fixtures(str(sql_path), url=connection_url)
 
 
 async def prepare_database(base_url: URL) -> tuple[URL, URL]:
