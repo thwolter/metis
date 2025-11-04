@@ -18,7 +18,7 @@ from testcontainers.redis import RedisContainer
 
 from core import db as core_db
 from core.config import get_settings
-from core.db import scoped_session
+from core.db import scoped_session, session_factory
 from main import app as main_app
 from metadata.api import websocket_access_context
 from tests.db import (  # type: ignore[missing-import]
@@ -119,6 +119,13 @@ async def _clean_db_between_tests():
 
 tenant_id = UUID('00000000-0000-0000-0000-000000000000')
 user_id = UUID('00000000-0000-0000-0000-000000000000')
+
+
+@pytest.fixture
+async def any_session():
+    """Provide a DB session for the default test user/tenant."""
+    async with session_factory() as s:
+        yield s
 
 
 @pytest.fixture

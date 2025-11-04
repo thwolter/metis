@@ -7,7 +7,7 @@ from sqlmodel import Field
 
 from core.config import get_settings
 
-APP_SCHEMA = get_settings().db_schema
+APP_SCHEMA = get_settings().metadata_schema
 
 
 def created_at_field() -> Any:

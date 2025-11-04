@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from sqlmodel import select
 
 from classification.models import (
@@ -11,9 +12,16 @@ from classification.models import (
     HeaderWeight,
 )
 from metadata.models import Document
+from tests.db import reset_database_state  # type: ignore[import]
+
+
+@pytest.fixture(scope='module', autouse=True)
+async def reset_db():
+    await reset_database_state()
 
 
 async def test_cascade_docclass_children(auth_session):
+    await reset_database_state()
     c = DocClass(class_name='annual_report', enabled=True)
     auth_session.add(c)
     await auth_session.flush()

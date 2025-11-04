@@ -60,7 +60,7 @@ async def scoped_session(*, access_context: AccessContext, verify: bool = True) 
                 await session.commit()
 
 
-async def pg_connect(tenant_id: UUID) -> asyncpg.Connection:
+async def pg_connect(tenant_id: UUID | None) -> asyncpg.Connection:
     settings = get_settings()
     dsn_secret = settings.postgres_url
     if dsn_secret is None:
@@ -68,4 +68,15 @@ async def pg_connect(tenant_id: UUID) -> asyncpg.Connection:
         raise RuntimeError(msg)
     dsn = dsn_secret.get_secret_value()
     dsn = dsn.replace('+asyncpg://', '://', 1)
+    if tenant_id is None:
+        return await asyncpg.connect(dsn=dsn)
     return await asyncpg.connect(dsn=dsn, server_settings={'app.tenant_id': str(tenant_id)})
+
+
+@asynccontextmanager
+async def pg_connection(tenant_id: UUID | None) -> AsyncIterator[asyncpg.Connection]:
+    conn = await pg_connect(tenant_id)
+    try:
+        yield conn
+    finally:
+        await conn.close()

@@ -26,7 +26,7 @@ def _default_context() -> ContextSchema:
     )
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='module', autouse=True)
 def load_vectra_data():
     load_fixtures('vectra_roles.sql')
     load_fixtures('vectra_fixtures.sql')

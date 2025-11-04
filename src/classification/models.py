@@ -15,22 +15,19 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 from sqlmodel import Field, Relationship
 
-from core.config import get_settings
 from metadata.models import BaseSQLModel, Document
 from utils.fields import created_at_field, updated_at_field
-
-APP_SCHEMA = get_settings().db_schema
 
 
 class DocClass(BaseSQLModel, table=True):
     """Supported document classes."""
 
     __tablename__ = 'doc_classes'  # type: ignore[bad-argument-type]
-    __table_args__ = ({'schema': APP_SCHEMA},)
+    __table_args__ = ({'schema': 'classification'},)
 
     # 'class' is awkward in Python. Use attribute class_name mapped to column 'class'.
     class_name: str = Field(sa_column=Column('class', String(100), primary_key=True))
-    enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False))
+    enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default='true'))
     created_at: datetime = created_at_field()
 
     # Relationships
@@ -59,11 +56,11 @@ class ClassPrototype(BaseSQLModel, table=True):
     __table_args__ = (
         ForeignKeyConstraint(
             ['class'],
-            [f'{APP_SCHEMA}.doc_classes.class'],
+            ['classification.doc_classes.class'],
             name='fk_prototypes_class',
             ondelete='CASCADE',
         ),
-        {'schema': APP_SCHEMA},
+        {'schema': 'classification'},
     )
 
     class_name: str = Field(sa_column=Column('class', String(100), primary_key=True))
@@ -84,11 +81,11 @@ class HeaderWeight(BaseSQLModel, table=True):
     __table_args__ = (
         ForeignKeyConstraint(
             ['class'],
-            [f'{APP_SCHEMA}.doc_classes.class'],
+            ['classification.doc_classes.class'],
             name='fk_header_weights_class',
             ondelete='CASCADE',
         ),
-        {'schema': APP_SCHEMA},
+        {'schema': 'classification'},
     )
 
     class_name: str = Field(sa_column=Column('class', String(100), primary_key=True))
@@ -109,19 +106,19 @@ class ClassificationRun(BaseSQLModel, table=True):
         # composite FK to documents for cascade on document deletion
         ForeignKeyConstraint(
             ['tenant_id', 'document_id'],
-            [f'{APP_SCHEMA}.documents.tenant_id', f'{APP_SCHEMA}.documents.document_id'],
+            ['metadata.documents.tenant_id', 'metadata.documents.document_id'],
             name='fk_classruns_document',
             ondelete='CASCADE',
         ),
         # FK to class for cascade on class deletion
         ForeignKeyConstraint(
             ['predicted_class'],
-            [f'{APP_SCHEMA}.doc_classes.class'],
+            ['classification.doc_classes.class'],
             name='fk_classruns_class',
             ondelete='SET NULL',  # keep the run but null out class if class removed
         ),
         Index('ix_classruns_doc_created', 'tenant_id', 'document_id', 'created_at'),
-        {'schema': APP_SCHEMA},
+        {'schema': 'classification'},
     )
 
     run_id: UUID = Field(default_factory=uuid4, primary_key=True)

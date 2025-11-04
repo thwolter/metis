@@ -58,7 +58,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         include_schemas=True,
         version_table='alembic_version',
-        version_table_schema=settings.db_schema,
+        version_table_schema=settings.metadata_schema,
     )
 
     with context.begin_transaction():
@@ -76,7 +76,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             include_schemas=True,
             version_table='alembic_version',
-            version_table_schema=settings.db_schema,
+            version_table_schema=settings.metadata_schema,
         )
 
         with context.begin_transaction():

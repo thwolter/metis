@@ -26,7 +26,7 @@ from utils.fields import (
     updated_by_field,
 )
 
-APP_SCHEMA = get_settings().db_schema
+APP_SCHEMA = get_settings().metadata_schema
 
 
 def utc_now() -> datetime:

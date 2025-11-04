@@ -3,9 +3,13 @@
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/docker/init/070_metis_roles.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/docker/init/080_metis_users.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/docker/init/100_metis_schemas.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/docker/init/105_search_path.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/docker/init/110_embedding_permissions.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/090_metis_schemas.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/100_classification_schema.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/110_search_path.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/120_embedding_permissions.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/docker/init/140_classifier_role.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/tests/fixtures/vectra_classifier.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/tests/fixtures/vectra_fixtures.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/tests/fixtures/vectra_roles.sql" dialect="PostgreSQL" />
   </component>
 </project>

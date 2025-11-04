@@ -36,7 +36,8 @@ class Settings(ValidatedSettings):
     otel_metrics_enabled: bool = True
     jwt_secret: SecretStr = SecretStr('dev-internal-token')
 
-    db_schema: str = 'metadata'
+    metadata_schema: str = 'metadata'
+    classification_schema: str = 'classification'
     pg_vector_schema: str = 'vectra'
 
     cors_allow_origins: tuple[str, ...] = ()

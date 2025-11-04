@@ -28,7 +28,7 @@ def upgrade() -> None:
             'created_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), nullable=False
         ),
         sa.PrimaryKeyConstraint('class'),
-        schema='metadata',
+        schema='classification',
     )
 
     # class_prototypes
@@ -42,10 +42,10 @@ def upgrade() -> None:
             'updated_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), nullable=False
         ),
         sa.ForeignKeyConstraint(
-            ['class'], ['metadata.doc_classes.class'], name='fk_prototypes_class', ondelete='CASCADE'
+            ['class'], ['classification.doc_classes.class'], name='fk_prototypes_class', ondelete='CASCADE'
         ),
         sa.PrimaryKeyConstraint('class'),
-        schema='metadata',
+        schema='classification',
     )
 
     # classification_runs
@@ -63,7 +63,7 @@ def upgrade() -> None:
             'created_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), nullable=False
         ),
         sa.ForeignKeyConstraint(
-            ['predicted_class'], ['metadata.doc_classes.class'], name='fk_classruns_class', ondelete='SET NULL'
+            ['predicted_class'], ['classification.doc_classes.class'], name='fk_classruns_class', ondelete='SET NULL'
         ),
         sa.ForeignKeyConstraint(
             ['tenant_id', 'document_id'],
@@ -72,14 +72,14 @@ def upgrade() -> None:
             ondelete='CASCADE',
         ),
         sa.PrimaryKeyConstraint('run_id'),
-        schema='metadata',
+        schema='classification',
     )
     op.create_index(
         'ix_classruns_doc_created',
         'classification_runs',
         ['tenant_id', 'document_id', 'created_at'],
         unique=False,
-        schema='metadata',
+        schema='classification',
     )
 
     # header_weights
@@ -90,17 +90,17 @@ def upgrade() -> None:
         sa.Column('is_regex', sa.Boolean(), nullable=False, server_default=sa.text('false')),
         sa.Column('weight', sa.Float(), nullable=False),
         sa.ForeignKeyConstraint(
-            ['class'], ['metadata.doc_classes.class'], name='fk_header_weights_class', ondelete='CASCADE'
+            ['class'], ['classification.doc_classes.class'], name='fk_header_weights_class', ondelete='CASCADE'
         ),
         sa.PrimaryKeyConstraint('class', 'pattern'),
-        schema='metadata',
+        schema='classification',
     )
 
 
 def downgrade() -> None:
     """Drop classification tables only, reverse of upgrade."""
-    op.drop_table('header_weights', schema='metadata')
-    op.drop_index('ix_classruns_doc_created', table_name='classification_runs', schema='metadata')
-    op.drop_table('classification_runs', schema='metadata')
-    op.drop_table('class_prototypes', schema='metadata')
-    op.drop_table('doc_classes', schema='metadata')
+    op.drop_table('header_weights', schema='classification')
+    op.drop_index('ix_classruns_doc_created', table_name='classification_runs', schema='classification')
+    op.drop_table('classification_runs', schema='classification')
+    op.drop_table('class_prototypes', schema='classification')
+    op.drop_table('doc_classes', schema='classification')
