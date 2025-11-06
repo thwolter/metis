@@ -7,6 +7,7 @@ Create Date: 2025-11-03 18:14:02.225169
 """
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -51,9 +52,8 @@ def upgrade() -> None:
     # classification_runs
     op.create_table(
         'classification_runs',
-        sa.Column('run_id', sa.Uuid(), nullable=False),
-        sa.Column('tenant_id', sa.Uuid(), nullable=False),
-        sa.Column('document_id', sa.Uuid(), nullable=False),
+        sa.Column('run_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('document_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('predicted_class', sa.String(length=100), nullable=True),
         sa.Column('prob', sa.Float(), nullable=False),
         sa.Column('margin', sa.Float(), nullable=False),
@@ -61,6 +61,12 @@ def upgrade() -> None:
         sa.Column('config', sa.JSON(), nullable=False),
         sa.Column(
             'created_at', sa.DateTime(timezone=True), server_default=sa.text("timezone('utc', now())"), nullable=False
+        ),
+        sa.Column(
+            'tenant_id',
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("current_setting('app.tenant_id', true)::uuid"),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(
             ['predicted_class'], ['classification.doc_classes.class'], name='fk_classruns_class', ondelete='SET NULL'
@@ -74,10 +80,19 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('run_id'),
         schema='classification',
     )
+    (
+        op.create_index(
+            'ix_classruns_doc_created',
+            'classification_runs',
+            ['tenant_id', 'document_id', 'created_at'],
+            unique=False,
+            schema='classification',
+        ),
+    )
     op.create_index(
-        'ix_classruns_doc_created',
+        'ix_classification_runs_document_id',
         'classification_runs',
-        ['tenant_id', 'document_id', 'created_at'],
+        ['document_id'],
         unique=False,
         schema='classification',
     )

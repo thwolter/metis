@@ -2,7 +2,7 @@ import pytest
 
 from classification.inference import predict_document_class
 from classification.service import (
-    _fetch_doc_vectors_by_digests,
+    fetch_doc_vectors_by_digests,
     recompute_class_prototype_batch,
 )
 from tests.utils import load_fixtures  # type: ignore[import]
@@ -53,7 +53,7 @@ async def test_predict_same_digest_matches_class(any_session):
     assert proto is not None and proto.n_docs >= 1
 
     # 2) Fetch the same chunk vectors from vectra (no collection filter, by digest)
-    vecs_by_digest = await _fetch_doc_vectors_by_digests(
+    vecs_by_digest = await fetch_doc_vectors_by_digests(
         digests=[digest],
     )
     assert digest in vecs_by_digest and len(vecs_by_digest[digest]) >= 1

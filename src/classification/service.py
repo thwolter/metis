@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
+from uuid import UUID
 
 import numpy as np
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from core.db import pg_connection
+from metadata.service import ensure_document
 from utils.vstore import VECTOR_SCHEMA
 
-from .models import ClassPrototype, DocClass
+from .models import ClassificationRun, ClassPrototype, DocClass
 from .utils import l2, normalise_vector
 
 
@@ -18,7 +20,7 @@ def _topk_mean(v: np.ndarray, k: int) -> float:
     return float(np.mean(np.sort(v)[-k:]))
 
 
-async def _fetch_doc_vectors_by_digests(
+async def fetch_doc_vectors_by_digests(
     *,
     digests: Sequence[str],
 ) -> dict[str, np.ndarray]:
@@ -79,7 +81,7 @@ async def recompute_class_prototype_batch(
     Accurate batch refresh: build centroid/dispersion from the provided labelled digests.
     Persists ClassPrototype (JSON centroid) via the async Session.
     """
-    doc_vecs = await _fetch_doc_vectors_by_digests(
+    doc_vecs = await fetch_doc_vectors_by_digests(
         digests=digests,
     )
     if not doc_vecs:
@@ -162,7 +164,7 @@ async def update_class_prototype_online(
     - dry_run=True: compute and return the would-be prototype (no DB writes).
     - dry_run=False: persist the change (ensure class exists, upsert prototype).
     """
-    doc_vecs = await _fetch_doc_vectors_by_digests(digests=[digest])
+    doc_vecs = await fetch_doc_vectors_by_digests(digests=[digest])
     if not doc_vecs:
         return None
 
@@ -200,3 +202,32 @@ async def update_class_prototype_online(
     session.add(existing_proto)
     await session.commit()
     return existing_proto
+
+
+async def persist_classification_run(
+    session: AsyncSession,
+    *,
+    document_id: UUID,
+    config: dict[str, Any],
+    prob: float,
+    margin: float,
+    chunks_used: int,
+    predicted_class: str | None,
+) -> ClassificationRun:
+    """Insert a classification run row (fire-and-forget semantics)."""
+    # todo: We can remove tenant_id after using tenant_id_field in metdata.Documents
+    tenant_id = session.info['tenant_id']
+    await ensure_document(session, tenant_id=tenant_id, document_id=document_id)
+    run = ClassificationRun(
+        document_id=document_id,
+        predicted_class=predicted_class,
+        prob=prob,
+        margin=margin,
+        chunks_used=chunks_used,
+        config=config,  # JSON
+    )
+    session.add(run)
+    await session.commit()
+    # If you need the row back with server defaults, uncomment:
+    # await session.refresh(run)
+    return run

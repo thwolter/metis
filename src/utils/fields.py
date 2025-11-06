@@ -55,3 +55,14 @@ def updated_by_field() -> Any:
             onupdate=text("current_setting('app.user_id', true)::uuid"),
         )
     )
+
+
+def tenant_id_field() -> Any:
+    """Tenant id column populated from PostgreSQL setting app.tenant_id."""
+    return Field(
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            nullable=False,
+            server_default=text("current_setting('app.tenant_id', true)::uuid"),
+        )
+    )

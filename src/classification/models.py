@@ -12,11 +12,12 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, relationship
 from sqlmodel import Field, Relationship
 
 from metadata.models import BaseSQLModel, Document
-from utils.fields import created_at_field, updated_at_field
+from utils.fields import created_at_field, tenant_id_field, updated_at_field
 
 
 class DocClass(BaseSQLModel, table=True):
@@ -122,8 +123,15 @@ class ClassificationRun(BaseSQLModel, table=True):
     )
 
     run_id: UUID = Field(default_factory=uuid4, primary_key=True)
-    tenant_id: UUID
-    document_id: UUID
+    tenant_id: UUID = tenant_id_field()
+    document_id: UUID = Field(
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            nullable=False,
+            index=True,
+        ),
+        description='The document that was classified.',
+    )
     predicted_class: str | None = Field(default=None, sa_column=Column('predicted_class', String(100), nullable=True))
     prob: float = Field(sa_column=Column(Float, nullable=False))
     margin: float = Field(sa_column=Column(Float, nullable=False))

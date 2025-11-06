@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated, List, Literal, Mapping, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -54,6 +55,7 @@ class OnlineUpdateResponse(BaseModel):
 
 class PredictByDigest(BaseModel):
     mode: Literal['by_digest']
+    document_id: UUID
     digests: Annotated[list[str], Field(min_length=1)]
     m_chunk: Annotated[int, Field(ge=1)] = 8
     header_weight_scale: Annotated[float, Field(ge=0.0)] = 0.05
@@ -62,6 +64,7 @@ class PredictByDigest(BaseModel):
 
 class PredictByChunks(BaseModel):
     mode: Literal['by_chunks']
+    document_id: UUID
     chunk_embeddings: Annotated[list[list[float]], Field(min_length=1)]
     chunk_headers: Optional[List[Optional[str]]] = None
     m_chunk: Annotated[int, Field(ge=1)] = 8

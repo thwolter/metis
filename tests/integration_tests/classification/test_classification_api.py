@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from fastapi.routing import APIRoute
 
@@ -114,6 +116,7 @@ async def test_predict_by_digest_returns_class(auth_client):
         'digests': [digest],
         'm_chunk': 8,
         'header_weight_scale': 0.05,
+        'document_id': str(uuid4()),
     }
     response = await auth_client.post('/api/classification/predict', json=predict_payload)
 
@@ -137,6 +140,7 @@ async def test_predict_by_chunks_applies_thresholds(auth_client):
             'min_prob': 0.6,
             'min_margin': 1.1,
         },
+        'document_id': str(uuid4()),
     }
 
     response = await auth_client.post('/api/classification/predict', json=payload)

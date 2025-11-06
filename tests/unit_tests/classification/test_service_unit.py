@@ -8,7 +8,7 @@ import pytest
 
 from classification.models import ClassPrototype, DocClass
 from classification.service import (
-    _fetch_doc_vectors_by_digests,
+    fetch_doc_vectors_by_digests,
     recompute_class_prototype_batch,
     update_class_prototype_online,
 )
@@ -113,7 +113,7 @@ async def test_fetch_doc_vectors_by_digests_averages_and_normalises(patch_pg):
         {'digest': 'd2', 'embedding': [0.6, 0.8]},
     ]
 
-    out = await _fetch_doc_vectors_by_digests(digests=['d1', 'd2'])
+    out = await fetch_doc_vectors_by_digests(digests=['d1', 'd2'])
     assert set(out.keys()) == {'d1', 'd2'}
     # d1 mean is (0.5, 0.5) -> unit vector at 45 degrees
     v1 = out['d1']
