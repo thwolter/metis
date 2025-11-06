@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, List, Literal, Mapping, Optional
+from typing import Annotated, Dict, List, Literal, Mapping, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -9,8 +9,14 @@ from pydantic import BaseModel, Field
 
 
 class Thresholds(BaseModel):
-    min_prob: float = Field(0.0, ge=0.0, le=1.0)
-    min_margin: float = Field(0.0, ge=0.0)
+    min_prob: float | None = Field(default=None, ge=0.0, le=1.0)
+    min_margin: float | None = Field(default=None, ge=0.0)
+    min_chunks: int | None = Field(default=None, ge=1)
+
+
+class ThresholdConfig(BaseModel):
+    global_: Thresholds = Field(default_factory=Thresholds)
+    per_class: Dict[str, Thresholds] = Field(default_factory=dict)
 
 
 # --- Recompute ---

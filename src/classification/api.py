@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from classification.inference import predict_document_class
+from classification.inference import InferenceResult, predict_document_class
 from classification.service import (
     fetch_doc_vectors_by_digests,
     persist_classification_run,
@@ -18,6 +16,8 @@ from core.deps import SessionDep
 from .schemas import (
     OnlineUpdateRequest,
     OnlineUpdateResponse,
+    PredictByChunks,
+    PredictByDigest,
     PredictRequest,
     PredictResponse,
     RecomputeRequest,
@@ -71,17 +71,50 @@ async def online_update_endpoint(
     )
 
 
+async def check_threshold(
+    *, payload: PredictByDigest | PredictByChunks, inference: InferenceResult
+) -> tuple[bool, str | None]:
+    """Apply simple global thresholds (no legacy, no per-class overrides).
+
+    Thresholds model:
+        class Thresholds(BaseModel):
+            min_prob: float | None
+            min_margin: float | None
+            min_chunks: int | None
+    """
+    thresholds = getattr(payload, 'thresholds', None)
+    if thresholds is None:
+        return False, None
+
+    # Extract with safe defaults
+    min_prob = getattr(thresholds, 'min_prob', None)
+    min_margin = getattr(thresholds, 'min_margin', None)
+    min_chunks = getattr(thresholds, 'min_chunks', None)
+
+    # Apply checks in order: prob -> margin -> chunks
+    if min_prob is not None and inference.prob < min_prob:
+        return True, 'below_min_prob'
+    if min_margin is not None and inference.margin < min_margin:
+        return True, 'below_min_margin'
+    if min_chunks is not None and inference.chunks_used < min_chunks:
+        return True, 'below_min_chunks'
+
+    return False, None
+
+
 @router.post('/predict', response_model=PredictResponse)
 async def predict_endpoint(
     payload: PredictRequest,
     session: AsyncSession = Depends(SessionDep),
 ):
     chunk_embeddings = None
-    if getattr(payload, 'mode', None) == 'by_chunks':
-        chunk_embeddings = [np.asarray(v, dtype=float) for v in getattr(payload, 'chunk_embeddings', [])]
     chunk_headers = None
     if getattr(payload, 'mode', None) == 'by_chunks':
+        chunk_embeddings = [np.asarray(v, dtype=float) for v in getattr(payload, 'chunk_embeddings', [])]
         chunk_headers = getattr(payload, 'chunk_headers', None)
+        # Check chunk_headers length if provided
+        if chunk_headers is not None and len(chunk_headers) != len(chunk_embeddings):
+            raise HTTPException(status_code=400, detail='chunk_headers length mismatch')
 
     try:
         res = await predict_document_class(
@@ -93,19 +126,12 @@ async def predict_endpoint(
             fetch_doc_vectors=fetch_doc_vectors_by_digests,
             m_chunk=payload.m_chunk,
             header_weight_scale=payload.header_weight_scale,
+            # thresholds removed from here
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    abstained = False
-    reason: Optional[str] = None
-    if getattr(payload, 'thresholds', None):
-        th = payload.thresholds  # type: ignore[attr-defined]
-        if th:
-            if res.prob < th.min_prob:
-                abstained, reason = True, 'below_min_prob'
-            if res.margin < th.min_margin:
-                abstained, reason = True, 'below_min_margin' if not reason else reason
+    abstained, reason = await check_threshold(payload=payload, inference=res)
 
     # Persist every prediction attempt
     config = {
@@ -118,7 +144,17 @@ async def predict_endpoint(
             'n_chunks': len(getattr(payload, 'chunk_embeddings', [])) if payload.mode == 'by_chunks' else None,
             'has_headers': bool(getattr(payload, 'chunk_headers', None)) if payload.mode == 'by_chunks' else False,
         },
+        'thresholds': (
+            payload.thresholds.model_dump()
+            if hasattr(payload.thresholds, 'model_dump')
+            else (
+                payload.thresholds.dict()
+                if hasattr(payload.thresholds, 'dict')
+                else (payload.thresholds if isinstance(payload.thresholds, dict) else None)
+            )
+        ),
         'abstained': abstained,
+        'reason': reason,
     }
     await persist_classification_run(
         session=session,
