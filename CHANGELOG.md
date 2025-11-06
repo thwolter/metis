@@ -1,3 +1,12 @@
+## 0.6.0 (2025-11-06)
+
+### Feat
+
+- **docs/classification**: add detailed documentation for classification domain and extend API/tests
+- **classification**: add batch trainer for prototype recomputation and labelled digest handling
+- **classification**: seed `DocClass` and `HeaderWeight` data with Alembic migration
+- **classification**: add threshold checks and enhance inference handling
+
 ## 0.5.0 (2025-11-06)
 
 ### Feat
