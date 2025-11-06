@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
+from classification.api import router as classification_router
 from core import configure_logging, get_settings, init_observability
 from metadata.api import router as metadata_router
 
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
         return {'status': 'ready'}
 
     application.include_router(metadata_router)
+    application.include_router(classification_router)
     return application
 
 

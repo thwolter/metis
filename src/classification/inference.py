@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Protocol, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -25,6 +25,10 @@ EmbeddingArray = NDArray[np.floating[Any]]
 EmbeddingSeq = Sequence[EmbeddingArray]
 EmbeddingInput = EmbeddingSeq | EmbeddingArray
 PrototypeMap = Mapping[str, EmbeddingArray]
+
+
+class DocVectorFetcher(Protocol):
+    async def __call__(self, *, digests: Sequence[str]) -> dict[str, np.ndarray]: ...
 
 
 async def _load_enabled_prototypes(session: AsyncSession) -> dict[str, np.ndarray]:
@@ -170,27 +174,30 @@ def _select_informative_chunks(
     header_weights: dict[str, list[tuple[str, bool, float]]],
     m_chunk: int,
     weight_scale: float,
-) -> tuple[list[int], np.ndarray]:
+) -> tuple[list[int], np.ndarray, list[str]]:
     """
     Rank chunks by max(class score) where score = cos(emb, proto) + header_bonus.
-    Return indices of top-m and the precomputed score matrix [n_chunks, n_classes].
+    Return indices of top-m, the precomputed score matrix [n_chunks, n_classes], and class names.
     """
     n = len(chunk_embeddings)
     if n == 0:
-        return [], np.zeros((0, len(protos)), dtype=float)
+        return [], np.zeros((0, len(protos)), dtype=float), []
 
     c_names, base_scores = _calculate_cosine_scores(chunk_embeddings, protos)
     _add_header_bonus(c_names, base_scores, chunk_headers, header_weights, weight_scale)
 
     top_idx = _informative_chunks(base_scores, m_chunk, n)
-    return top_idx, base_scores
+    return top_idx, base_scores, c_names
 
 
 async def predict_document_class(
     *,
     session: AsyncSession,
-    chunk_embeddings: EmbeddingInput,
+    mode: Literal['by_chunks', 'by_digest'] = 'by_chunks',
+    chunk_embeddings: EmbeddingInput | None = None,
     chunk_headers: Sequence[str | None] | None = None,
+    digests: Sequence[str] | None = None,
+    fetch_doc_vectors: DocVectorFetcher | None = None,
     m_chunk: int = 8,
     k_doc: int = 5,  # reserved if you later ensemble multiple centroids per class
     header_weight_scale: float = 0.05,
@@ -199,7 +206,26 @@ async def predict_document_class(
     Predict class using KNN against class centroids with informative-chunk selection and
     optional header-weight bonuses.
     """
-    chunk_list = _normalise_chunk_embeddings(chunk_embeddings)
+    # Resolve inputs based on mode
+    if mode == 'by_digest':
+        if not digests:
+            return InferenceResult(predicted_class=None, prob=0.0, margin=0.0, chunks_used=0, scores={})
+        if fetch_doc_vectors is None:
+            raise ValueError("fetch_doc_vectors callback must be provided for mode='by_digest'.")
+        doc_vecs = await fetch_doc_vectors(digests=digests)
+        if not doc_vecs:
+            return InferenceResult(predicted_class=None, prob=0.0, margin=0.0, chunks_used=0, scores={})
+        _embeddings: EmbeddingInput = list(doc_vecs.values())
+        _headers: Sequence[str | None] | None = None
+    elif mode == 'by_chunks':
+        if chunk_embeddings is None:
+            return InferenceResult(predicted_class=None, prob=0.0, margin=0.0, chunks_used=0, scores={})
+        _embeddings = chunk_embeddings
+        _headers = chunk_headers
+    else:
+        raise ValueError(f'Unknown mode: {mode}')
+
+    chunk_list = _normalise_chunk_embeddings(_embeddings)
 
     protos = await _load_enabled_prototypes(session)
     if not protos:
@@ -208,9 +234,9 @@ async def predict_document_class(
     header_weights = await _load_header_weights(session)
 
     # Pick informative chunks and aggregate class scores over them
-    idx, score_matrix = _select_informative_chunks(
+    idx, score_matrix, c_names = _select_informative_chunks(
         chunk_embeddings=chunk_list,
-        chunk_headers=chunk_headers,
+        chunk_headers=_headers,
         protos=protos,
         header_weights=header_weights,
         m_chunk=m_chunk,
@@ -219,7 +245,6 @@ async def predict_document_class(
     if not idx:
         return InferenceResult(predicted_class=None, prob=0.0, margin=0.0, chunks_used=0, scores={})
 
-    c_names = list(protos.keys())
     sel = score_matrix[idx, :]  # [m,k]
     agg = sel.mean(axis=0)  # average across informative chunks
 

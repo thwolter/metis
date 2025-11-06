@@ -61,6 +61,7 @@ async def test_predict_same_digest_matches_class(any_session):
     # 3) Classify using informative-chunk selection (headers not needed here)
     result = await predict_document_class(
         session=any_session,
+        mode='by_chunks',
         chunk_embeddings=vecs_by_digest[digest],
         chunk_headers=None,
         m_chunk=8,

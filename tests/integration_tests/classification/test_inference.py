@@ -65,6 +65,7 @@ async def test_predict_document_class_with_header_boost(any_session: AsyncSessio
 
     result: InferenceResult = await predict_document_class(
         session=any_session,
+        mode='by_chunks',
         chunk_embeddings=chunks,
         chunk_headers=headers,
         m_chunk=8,
@@ -110,6 +111,7 @@ async def test_predict_document_class_informative_selection(any_session: AsyncSe
 
     res = await predict_document_class(
         session=any_session,
+        mode='by_chunks',
         chunk_embeddings=chunks,
         chunk_headers=headers,
         m_chunk=6,

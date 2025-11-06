@@ -8,6 +8,8 @@
     <file url="file://$PROJECT_DIR$/docker/init/110_search_path.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/docker/init/120_embedding_permissions.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/docker/init/140_classifier_role.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/tests/fixtures/classification.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/tests/fixtures/classification_api_prototypes.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/tests/fixtures/vectra_classifier.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/tests/fixtures/vectra_fixtures.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/tests/fixtures/vectra_roles.sql" dialect="PostgreSQL" />

@@ -38,7 +38,7 @@ def test_select_informative_chunks_basic():
         mean = np.array([1.0, 0.0, 0.0, 0.0]) if i < 2 else np.array([0.0, 1.0, 0.0, 0.0])
         chunks.append(mean + 0.05 * rng.normal(size=4))
 
-    idx, score_mat = _select_informative_chunks(
+    idx, score_mat, _ = _select_informative_chunks(
         chunk_embeddings=chunks,
         chunk_headers=None,
         protos=protos,
@@ -67,7 +67,7 @@ def test_select_informative_chunks_with_headers():
     }
     headers = ['Management Report'] * 6
 
-    idx, score_mat = _select_informative_chunks(
+    idx, score_mat, class_names = _select_informative_chunks(
         chunk_embeddings=chunks,
         chunk_headers=headers,
         protos=protos,
@@ -79,3 +79,4 @@ def test_select_informative_chunks_with_headers():
     assert len(idx) == 4
     # header bonus should lift class_a over class_b on selected rows
     assert np.all((score_mat[idx, 0] - score_mat[idx, 1]) > -1e-6)
+    assert class_names == names

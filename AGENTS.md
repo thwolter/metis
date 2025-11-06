@@ -1,10 +1,10 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/` holds application code split into domains such as `agent/`, `metadata/`, and `core/`. Each package exposes Pydantic schemas, SQLModel models, and service utilities.
+- `src/` holds application code split into domains such as `agent/`, `metadata/`, `classification/` , and `core/`. Each package exposes Pydantic schemas, SQLModel models, and service utilities.
 - `alembic/` contains database migrations (`versions/`) and Alembic configuration. The migrations target the `metadata` schema; keep new revisions scoped accordingly.
 - `tests/` is organized by level (`unit_tests/`, `integration_tests/`) and mirrors the `src/` layout for ease of discovery.
-- `notebooks/` and `agent.egg-info/` are ancillary; avoid coupling production logic to them.
+
 
 ## Build, Test, and Development Commands
 - `uv run task lint` (if defined) or `./.venv/bin/ruff check src tests` validates lint rules.
@@ -20,9 +20,10 @@
 ## Testing Guidelines
 - Prefer `tests/unit_tests/` for pure logic and `tests/integration_tests/` when invoking agents or database layers.
 - Name tests descriptively (`test_<behavior>_<expectation>`), mirroring the target module.
-- Use the in-memory SQLite fixtures provided in `tests/test_metadata_service.py`; avoid hard-coded Postgres dependencies in unit tests.
+- All database operations must use the **pytest fixtures** defined in `conftest.py`.
 
 ## Commit & Pull Request Guidelines
+- The agent must not summarise its work unless explicitly requested or required by the task output schema.
 - Follow Conventional Commits (`feat:`, `fix:`, etc.); the repo ships with Commitizen (`cz`) and will lint on release bumps.
 - PRs should include: summary of user impact, references to issue IDs, screenshots or logs for API/UI changes, and confirmation that `pytest` and `ruff` have been run.
 

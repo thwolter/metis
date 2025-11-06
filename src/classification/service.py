@@ -73,6 +73,7 @@ async def recompute_class_prototype_batch(
     session: AsyncSession,
     class_name: str,
     digests: Sequence[str],
+    dry_run: bool = False,
 ) -> ClassPrototype | None:
     """
     Accurate batch refresh: build centroid/dispersion from the provided labelled digests.
@@ -85,6 +86,15 @@ async def recompute_class_prototype_batch(
         return None
 
     mu, disp, n_docs = _centroid_and_dispersion(doc_vecs.values())
+
+    if dry_run:
+        # Return a computed, in-memory prototype; no persistence, no side effects.
+        return ClassPrototype(
+            class_name=class_name,
+            centroid=mu.tolist(),
+            dispersion=disp,
+            n_docs=n_docs,
+        )
 
     # ensure class exists and upsert prototype (async path only)
     existing_cls = await session.get(DocClass, class_name)
@@ -103,53 +113,90 @@ async def recompute_class_prototype_batch(
     return managed
 
 
+def _compute_updated_proto(
+    *,
+    class_name: str,
+    existing: ClassPrototype | None,
+    dvec: np.ndarray,
+    ema_alpha: float,
+) -> ClassPrototype:
+    """
+    Pure function: given an optional existing prototype and a new document vector,
+    return the updated prototype (UNMANAGED). No DB side-effects.
+    """
+    if existing is None:
+        # First observation for this class
+        return ClassPrototype(
+            class_name=class_name,
+            centroid=dvec.tolist(),
+            dispersion=0.0,
+            n_docs=1,
+        )
+
+    # Running-mean style update (normalise at the end)
+    sum_vec = np.asarray(existing.centroid, dtype=float) * max(existing.n_docs, 1)
+    sum_vec = sum_vec + dvec
+    mu = l2(sum_vec.reshape(1, -1))[0]
+    sim = float(dvec @ mu)
+    disp = (1.0 - ema_alpha) * existing.dispersion + ema_alpha * (1.0 - sim)
+
+    return ClassPrototype(
+        class_name=class_name,
+        centroid=mu.tolist(),
+        dispersion=disp,
+        n_docs=existing.n_docs + 1,
+    )
+
+
 async def update_class_prototype_online(
     *,
     session: AsyncSession,
     class_name: str,
     digest: str,
     ema_alpha: float = 0.1,
-) -> None | ClassPrototype | type[ClassPrototype]:
+    dry_run: bool = False,
+) -> ClassPrototype | None:
     """
     Fast online update from a single newly-labelled digest.
-    Uses running-sum approximation if you haven't added a persistent sum_vec column.
+
+    - dry_run=True: compute and return the would-be prototype (no DB writes).
+    - dry_run=False: persist the change (ensure class exists, upsert prototype).
     """
-    doc_vecs = await _fetch_doc_vectors_by_digests(
-        digests=[digest],
-    )
+    doc_vecs = await _fetch_doc_vectors_by_digests(digests=[digest])
     if not doc_vecs:
         return None
 
     dvec = next(iter(doc_vecs.values()))
 
-    # ensure class exists (async)
+    # Lookup only (safe for dry_run)
     existing_cls = await session.get(DocClass, class_name)
+    existing_proto = await session.get(ClassPrototype, class_name)
+
+    # Compute the target prototype (pure, shared path)
+    target = _compute_updated_proto(
+        class_name=class_name,
+        existing=existing_proto,
+        dvec=dvec,
+        ema_alpha=ema_alpha,
+    )
+
+    if dry_run:
+        return target  # no side-effects
+
+    # Persisted path
     if existing_cls is None:
         session.add(DocClass(class_name=class_name, enabled=True))
         await session.flush()
 
-    proto = await session.get(ClassPrototype, class_name)
-    if proto is None:
-        proto = ClassPrototype(
-            class_name=class_name,
-            centroid=dvec.tolist(),
-            dispersion=0.0,
-            n_docs=1,
-        )
-        session.add(proto)
+    if existing_proto is None:
+        session.add(target)
         await session.commit()
-        return proto
+        return target
 
-    # running mean approximation
-    sum_vec = np.asarray(proto.centroid, dtype=float) * max(proto.n_docs, 1)
-    sum_vec = sum_vec + dvec
-    mu = l2(sum_vec.reshape(1, -1))[0]
-    sim = float(dvec @ mu)
-    disp = (1.0 - ema_alpha) * proto.dispersion + ema_alpha * (1.0 - sim)
-
-    proto.centroid = mu.tolist()
-    proto.dispersion = disp
-    proto.n_docs = proto.n_docs + 1
-    session.add(proto)
+    # Apply deltas to the managed instance
+    existing_proto.centroid = target.centroid
+    existing_proto.dispersion = target.dispersion
+    existing_proto.n_docs = target.n_docs
+    session.add(existing_proto)
     await session.commit()
-    return proto
+    return existing_proto
