@@ -4,6 +4,7 @@ from typing import Any, Iterable, Sequence
 from uuid import UUID
 
 import numpy as np
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from core.db import pg_connection
@@ -18,6 +19,16 @@ def _topk_mean(v: np.ndarray, k: int) -> float:
     # helper if you later decide to use robust pooling; unused in centroid
     k = max(1, min(k, v.shape[0]))
     return float(np.mean(np.sort(v)[-k:]))
+
+
+async def list_enabled_doc_classes(*, session: AsyncSession) -> list[str]:
+    """Return enabled document class names ordered lexicographically."""
+    result = await session.exec(
+        select(DocClass.class_name)
+        .where(DocClass.enabled.is_(True))  # type: ignore[missing-attribute]
+        .order_by(DocClass.class_name)
+    )
+    return list(result.all())
 
 
 async def fetch_doc_vectors_by_digests(

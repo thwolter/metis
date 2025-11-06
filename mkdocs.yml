@@ -6,6 +6,9 @@ docs_dir: docs
 theme:
   name: material
 nav:
-  - Overview: index.md
+  - Overview:
+      - Welcome: index.md
+  - Domain Guides:
+      - Classification Pipeline: classification/index.md
   - API:
       - Metadata API: frontend_api_spec.md

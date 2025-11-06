@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from classification.inference import InferenceResult, predict_document_class
 from classification.service import (
     fetch_doc_vectors_by_digests,
+    list_enabled_doc_classes,
     persist_classification_run,
     recompute_class_prototype_batch,
     update_class_prototype_online,
@@ -25,6 +26,11 @@ from .schemas import (
 )
 
 router = APIRouter(prefix='/api/classification', tags=['classification'])
+
+
+@router.get('/doc-classes', response_model=list[str])
+async def list_doc_classes(session: AsyncSession = Depends(SessionDep)):
+    return await list_enabled_doc_classes(session=session)
 
 
 @router.post('/recompute', response_model=RecomputeResponse)

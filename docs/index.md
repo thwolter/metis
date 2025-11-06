@@ -1,14 +1,17 @@
 # FDE Classifier Documentation
 
-Welcome to the FDE Classifier documentation site. This project ingests document jobs,
-extracts structured metadata with LangGraph agents, and persists results with tenant-aware
-row-level security.
+Metis ingests document jobs, extracts structured metadata with LangGraph agents,
+and persists results with tenant-aware row-level security. Use this guide to
+navigate the platform’s architecture, domain-specific workflows, and APIs.
 
-## What You'll Find
+## Docs Map
 
-- **Architecture Overview** – how FastAPI, Dramatiq workers, and PGVector collaborate.
-- **Authentication Flow** – requests use `Authorization: Bearer <jwt>`; tenancy comes from the `tid` claim and is enforced through [`tenauth`](https://thwolter.github.io/tenauth/) ([PyPI](https://pypi.org/project/tenauth/)).
-- **Metadata API Reference** – detailed request/response schema for all `/v1` endpoints.
+- **Architecture & Operations** – FastAPI app, Dramatiq workers, pgvector storage,
+  and TenAuth-backed RBAC form the backbone of the service.
+- **Domain Guides** – deep dives on core packages such as
+  [Classification Pipeline](classification/index.md).
+- **API Reference** – detailed request/response schema for all `/v1` endpoints in
+  the [Metadata API Reference](frontend_api_spec.md).
 
 ## Getting Started
 
@@ -16,11 +19,11 @@ row-level security.
 2. Apply the latest migrations: `alembic upgrade head`.
 3. Launch the API: `./.venv/bin/python main.py`.
 
-## Building the Docs
+## Documentation Tooling
 
 ```bash
 uv run mkdocs serve
 ```
 
-This starts a local preview at <http://127.0.0.1:8000>. Use `mkdocs build` to generate static
-site assets under `site/`.
+Start a preview at <http://127.0.0.1:8000>. Build static assets with `uv run mkdocs build`
+to populate the `site/` directory.

@@ -21,6 +21,7 @@ Metis is a FastAPI service that orchestrates document metadata extraction and cl
 - Application: `src/main.py` boots the FastAPI app, health probes, and routes under `/v1`.
 - Metadata domain: `src/metadata/` provides DTOs, SQLModel models, REST endpoints, and job orchestration helpers.
 - Agents: `src/agent/` defines the LangGraph pipeline that classifies documents and emits `MetadataSchema`.
+- Classification: `src/classification/` maintains class prototypes, inference helpers, and background trainers for document labels.
 - Broker: `src/core/broker.py` wires Dramatiq to Redis; workers in `metadata/tasks.py` consume jobs.
 - Persistence: PostgreSQL + pgvector stores metadata versions (`metadata/models.py`) and LangChain collections.
 - Security: TenAuth access context middleware injects tenant/user IDs into every DB session.
@@ -69,6 +70,7 @@ Requests automatically capture tenant/user context, merge generated metadata wit
 MkDocs powers the user guide in `docs/`.
 - Develop locally with `uv run mkdocs serve`
 - Produce static assets with `uv run mkdocs build` (output in `site/`)
+- Explore the classification domain guide in `docs/classification/index.md` (surfaced in MkDocs navigation as *Classification Pipeline*)
 
 ## Observability
 Set `OTLP_ENDPOINT`, `OTLP_HEADERS`, `OTEL_LOGS_ENABLED`, and related flags in `.env` to forward traces/logs. Logging is structured via `core.logging.configure_logging()`; adjust `LOG_LEVEL`/`log_level` as needed.
