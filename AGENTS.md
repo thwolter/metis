@@ -14,7 +14,7 @@
 
 ## Coding Style & Naming Conventions
 - Python code uses 4-space indentation and follows Ruff’s defaults (`pyproject.toml` sets line length 120, single quotes).
-- SQLModel classes should keep enum-backed states (`JobStatus`) and serialize JSON fields via `model_dump(mode='json')`.
+- SQLModel classes should keep enum-backed states (e.g. extraction job statuses) and serialize JSON fields via `model_dump(mode='json')`.
 - Module names remain lowercase with underscores (`metadata/service.py`), while Pydantic models and SQLModels use `PascalCase`.
 
 ## Testing Guidelines

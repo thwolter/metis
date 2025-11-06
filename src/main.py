@@ -3,6 +3,8 @@ from starlette.middleware.cors import CORSMiddleware
 
 from classification.api import router as classification_router
 from core import configure_logging, get_settings, init_observability
+from extraction.api import router as extraction_router
+from extraction.api import stream_router as extraction_stream_router
 from metadata.api import router as metadata_router
 
 
@@ -31,6 +33,8 @@ def create_app() -> FastAPI:
 
     application.include_router(metadata_router)
     application.include_router(classification_router)
+    application.include_router(extraction_stream_router)
+    application.include_router(extraction_router)
     return application
 
 

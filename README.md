@@ -12,17 +12,17 @@ Metis is a FastAPI service that orchestrates document metadata extraction and cl
 
 ## Features
 - FastAPI metadata API secured with TenAuth JWTs and multi-tenant session scoping.
-- Asynchronous Dramatiq workers to run LangGraph agents and persist results without blocking clients.
+- Attribute-centric extraction pipeline built on LangGraph with per-attribute status streaming.
 - Versioned metadata store built on SQLModel + PostgreSQL/pgvector with fingerprinted payloads and manual override support.
 - Vector store synchronisation that updates LangChain PostgreSQL embeddings alongside metadata revisions.
 - Observability hooks for OTLP traces/logs and structured logging across API and worker processes.
 
 ## Architecture
 - Application: `src/main.py` boots the FastAPI app, health probes, and routes under `/v1`.
-- Metadata domain: `src/metadata/` provides DTOs, SQLModel models, REST endpoints, and job orchestration helpers.
+- Metadata domain: `src/metadata/` provides DTOs, SQLModel models, REST endpoints, and manual metadata/search utilities.
+- Extraction domain: `src/extraction/` hosts the attribute registry, retrieval/map/reduce pipeline, persistence helpers, and websocket status emitter.
 - Agents: `src/agent/` defines the LangGraph pipeline that classifies documents and emits `MetadataSchema`.
 - Classification: `src/classification/` maintains class prototypes, inference helpers, and background trainers for document labels.
-- Broker: `src/core/broker.py` wires Dramatiq to Redis; workers in `metadata/tasks.py` consume jobs.
 - Persistence: PostgreSQL + pgvector stores metadata versions (`metadata/models.py`) and LangChain collections.
 - Security: TenAuth access context middleware injects tenant/user IDs into every DB session.
 
@@ -44,21 +44,17 @@ Metis is a FastAPI service that orchestrates document metadata extraction and cl
    ```bash
    uv run uvicorn src.main:app --reload
    ```
-6. Start a Dramatiq worker so background jobs are processed:
-   ```bash
-   uv run dramatiq metadata.tasks --queues default --processes 1
-   ```
 
 Health checks are available at `/healthz` and `/readyz`. All `/v1/**` routes require `Authorization: Bearer <jwt>` tokens that include `tid` and `sub` claims.
 
 ## API Quick Tour
-- `POST /v1/metadata`: enqueue metadata extraction for a document, optionally waiting for completion.
-- `POST /v1/documents/{document_id}/rebuild`: rebuild metadata using the latest ingestion context.
-- `GET /v1/jobs/{job_id}` / `DELETE /v1/jobs/{job_id}`: inspect or cancel queued jobs.
+- `POST /v1/extraction/run`: launch an attribute-centric extraction job.
+- `GET /v1/extraction/jobs/{job_id}` / `POST /v1/extraction/jobs/{job_id}/cancel`: inspect or cancel extraction jobs.
+- `WS /v1/jobs/{job_id}/stream`: subscribe to real-time extraction status updates.
 - `GET /v1/documents/{document_id}/metadata?version=latest|vN`: fetch versioned metadata snapshots.
 - `PUT /v1/documents/{document_id}/metadata`: persist manual overrides without invoking the agent.
 
-Requests automatically capture tenant/user context, merge generated metadata with locked fields, and update the vector store when jobs succeed.
+Extraction requests automatically capture tenant/user context, ensure document records exist for manual overrides, stream per-attribute status updates, and persist results together with provenance.
 
 ## Quality Gates
 - `uv run task lint` (or `./.venv/bin/ruff check src tests`) runs Ruff lint and formatting.

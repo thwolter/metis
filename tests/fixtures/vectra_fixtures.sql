@@ -22,6 +22,8 @@ SET row_security = off;
 -- Name: vectra; Type: SCHEMA; Schema: -; Owner: ddl_owner
 --
 
+DROP SCHEMA IF EXISTS vectra CASCADE;
+
 CREATE SCHEMA vectra;
 
 

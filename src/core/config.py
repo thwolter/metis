@@ -40,6 +40,12 @@ class Settings(ValidatedSettings):
     classification_schema: str = 'classification'
     pg_vector_schema: str = 'vectra'
 
+    extraction_default_model: str = 'openai:gpt-4o-mini'
+    extraction_model_version: str = '2025-01-01'
+    extraction_max_chunks: int = 6
+    extraction_top_m: int = 3
+    extraction_header_boost: float = 0.5
+
     cors_allow_origins: tuple[str, ...] = ()
 
     @field_validator('cors_allow_origins', mode='before')

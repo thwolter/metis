@@ -2,36 +2,53 @@
 
 ## Base URL and Authentication
 - **Service root**: all versioned endpoints live under `/v1`. Combine with the environment host, for example `https://metadata.internal.example.com/v1`.
-- **Authentication**: every request must send `Authorization: Bearer <jwt>`. Tokens are decoded with [`tenauth`](https://thwolter.github.io/tenauth/) and must contain `tid` (tenant) and `sub` (user) claims. The package is published on [PyPI](https://pypi.org/project/tenauth/). Missing or malformed tokens return `401 Unauthorized`.
+- **Authentication**: every request must send `Authorization: Bearer <jwt>`. Tokens are decoded with [`tenauth`](https://thwolter.github.io/tenauth/) and must contain `tid` (tenant) and `sub` (user) claims. Missing or malformed tokens return `401 Unauthorized`.
 - **Content type**: request and response bodies are JSON encoded using UTF-8.
 
 ## Common Data Structures
 
-### JobContextPayload
+### ExtractionRequest (body)
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `digest` | string (`SHA256B64`) | Base64-encoded SHA-256 hash of the document. Used for idempotency. |
-| `collection_name` | string | Logical collection in the vector store. |
-| _implicit tenant_ | derived | The backend injects the tenant from the JWT (`tid`) claim; clients must not send it. |
+| `doc_id` | UUID | Identifier of the document whose attributes will be extracted. |
+| `doc_type` | string | Document type key registered in the extraction attribute registry (e.g. `annual_report`). |
+| `digest` | string (`SHA256B64`) | Digest used to filter chunks in the vector store. |
+| `collection_name` | string | Vector store collection name. |
+| `attributes` | string[] \| null | Optional subset of attribute names to extract (defaults to all registered attributes for the document type). |
+| `model` | string \| null | Optional override for the extraction LLM model. |
+| `retriever` | RetrievalConfig \| null | Optional overrides for max chunk counts, header boosts, and hint weights. |
+| `dry_run` | boolean | When `true`, the pipeline emits streaming updates but skips persistence. |
+
+### RetrievalConfig
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `max_chunks` | integer | `12` | Maximum chunks to retrieve per attribute. |
+| `top_m` | integer | `3` | Upper bound on chunks passed to the map step. |
+| `header_boost` | float | `0.5` | Multiplier applied when header hints match. |
+| `semantic_weight` | float | `1.0` | Weight of semantic similarity. |
+| `bm25_weight` | float | `0.5` | Weight of lexical / BM25 similarity. |
+| `hints_weight` | float | `0.3` | Bonus applied when attribute hints match the chunk text. |
+
+### AttributeResult
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `name` | string | Attribute identifier. |
+| `value` | any \| null | Normalised attribute value. |
+| `confidence` | float \| null | Confidence score in \[0, 1]. |
+| `provenance` | string[] | Chunk IDs contributing to the decision. |
+| `rationale` | string \| null | Optional free-form rationale. |
+| `validation_issues` | object[] | Any validation warnings recorded during the pipeline. |
+| `status` | `"accepted"` \| `"abstained"` \| `"error"` | Final disposition. |
 
 ### MetadataSchema
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `document_type` | string \| null | e.g. `"Annual Report"`. |
-| `company_name` | string \| null | Primary company name. |
-| `parent_company` | string \| null | Immediate parent. |
-| `ultimate_parent_company` | string \| null | Top-level parent. |
-| `reporting_date` | date \| null | ISO-8601 date (`YYYY-MM-DD`). |
-| `reporting_year` | integer \| null | e.g. `2023`. |
-| `call_date` | date \| null | When the document was received. |
-| `company_register` | string \| null | Register name. |
-| `register_number` | string \| null | Registration identifier. |
-| `tags` | string[] \| null | Arbitrary document tags. |
+Manual metadata endpoints continue to use the existing `MetadataSchema`. Fields mirror the historic metadata payload (document type, company fields, tags, etc.).
 
-### JobStatus (enum)
-`queued`, `running`, `succeeded`, `failed`, `canceled`.
+### ExtractionJobStatus (enum)
+`queued`, `running`, `completed`, `failed`, `canceled`.
 
 ### Standard Error Payload
 Most backend validation and lookup errors follow FastAPI’s default shape:
@@ -46,106 +63,83 @@ Validation errors (`422`) return an array of issues under `detail`.
 
 | Method | Path | Summary |
 | --- | --- | --- |
-| POST | `/v1/metadata` | Create (or reuse) a metadata extraction job. |
-| POST | `/v1/documents/{document_id}/rebuild` | Rebuild metadata for an existing document. |
-| GET | `/v1/jobs/{job_id}` | Retrieve job status (and result link when ready). |
-| DELETE | `/v1/jobs/{job_id}` | Request job cancellation. |
-| WS | `/v1/jobs/{job_id}/stream` | Subscribe to live job status updates. |
+| POST | `/v1/extraction/run` | Launch an attribute extraction job. |
+| GET | `/v1/extraction/jobs/{job_id}` | Retrieve extraction job status (and persisted results when ready). |
+| POST | `/v1/extraction/jobs/{job_id}/cancel` | Request extraction job cancellation. |
+| WS | `/v1/jobs/{job_id}/stream` | Subscribe to live extraction job status updates. |
 | GET | `/v1/documents/{document_id}/metadata` | Fetch versioned metadata for a document. |
-| PUT | `/v1/documents/{document_id}/metadata` | Manually upsert metadata (bypasses agent). |
-| DELETE | `/v1/documents/{document_id}` | Remove a document together with its jobs and metadata versions. |
+| PUT | `/v1/documents/{document_id}/metadata` | Manually upsert metadata (bypasses the extraction pipeline). |
+| DELETE | `/v1/documents/{document_id}` | Remove a document together with its metadata versions and extraction jobs. |
 | GET | `/v1/documents/search` | Search documents by metadata attributes. |
 | GET | `/healthz`, `/readyz` | Liveness and readiness probes (unauthenticated). |
 
-## Jobs
+## Extraction
 
-### POST `/v1/metadata`
-Create a metadata extraction job. Jobs are idempotent per `(tenant_id, document_id, profile, ingestion_fingerprint)`.
-
-**Query string**
-
-| Name | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `wait_for_secs` | integer | `0` | Optional polling window (0–30). The API blocks up to this many seconds, returning `result_url` immediately if the job succeeds within the window. |
-
-**Request body**
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `document_id` | UUID \| null | optional | If omitted, the backend derives an ID from `context.digest`. |
-| `context` | JobContextPayload | yes | Backend augments this payload with the tenant from the JWT (`tid`). |
-| `metadata` | MetadataSchema \| null | optional | Seed values. Agent output may overwrite unlocked fields. |
-| `locked_fields` | string[] \| null | optional | Fields that must remain unchanged even if the agent proposes values. Empty list or omission allows full overwrite. |
-| `profile` | string | yes (default `"default"`) | Selects the agent strategy. |
-| `priority` | integer (0–10) \| null | optional (default `5`) | Lower numbers process sooner. |
-| `callback_url` | URL \| null | optional | Invoked after success. |
-| `idempotency_key` | string (≤128) \| null | optional | Overrides default fingerprint (`context.digest`). Enables client-managed idempotency. |
-
-The service persists the context digest and collection alongside the job record (no JSON blob)
-so workers can rehydrate the agent context deterministically.
+### POST `/v1/extraction/run`
+Launch an attribute-centric extraction job. Jobs are idempotent per `(tenant_id, doc_id, doc_type)`; resubmitting the same triplet while the job is queued overwrites model and retriever settings.
 
 **Success response**
-- `202 Accepted` with `JobCreatedResponse`:
+- `202 Accepted` with `ExtractionJobResponse`:
 
 ```json
 {
   "job_id": "4f3c6857-0405-454a-9695-b868aee81af7",
-  "document_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
-  "status_url": "https://metadata.internal.example.com/v1/jobs/4f3c6857-0405-454a-9695-b868aee81af7",
-  "result_url": "https://metadata.internal.example.com/v1/documents/be9f6304-5ea1-4690-843b-7192617b61d4/metadata?version=latest"
+  "doc_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
+  "doc_type": "annual_report",
+  "attributes": {},
+  "model": "openai:gpt-4o-mini",
+  "model_version": "2025-10-15",
+  "started_at": "2025-11-06T16:00:00Z",
+  "completed_at": null,
+  "errors": [],
+  "status_url": "https://metadata.internal.example.com/v1/extraction/jobs/4f3c6857-0405-454a-9695-b868aee81af7",
+  "stream_url": "https://metadata.internal.example.com/v1/jobs/4f3c6857-0405-454a-9695-b868aee81af7/stream"
 }
 ```
 
-Note: `result_url` is present only if the job finishes successfully during the wait window.
-
-**Error responses**
-- `401 Unauthorized` when the Bearer token is missing or invalid.
-- `422 Unprocessable Entity` for validation errors (e.g., malformed UUIDs or dates).
-
-### POST `/v1/documents/{document_id}/rebuild`
-Kick off a rebuild job for an existing document. Body accepts the same payload as `CreateJobDTO`; the `document_id` path parameter overrides any value supplied in the body.
-
-**Success response**
-- `202 Accepted` with `JobCreatedResponse` (same shape as above, `result_url` omitted until completion).
-
 **Error responses**
 - `401 Unauthorized`
-- `422 Unprocessable Entity`
+- `422 Unprocessable Entity` for malformed UUIDs or missing `digest` / `collection_name`.
 
-### GET `/v1/jobs/{job_id}`
-Return job status and progress metadata.
+### GET `/v1/extraction/jobs/{job_id}`
+Return job status, sequence counter, and persisted results when the job finishes.
 
 **Success response**
-- `200 OK` with `JobStatusResponse`:
+- `200 OK` with `ExtractionJobStatusResponse`:
 
 ```json
 {
   "job_id": "4f3c6857-0405-454a-9695-b868aee81af7",
-  "document_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
-  "tenant_id": "b46a635d-aead-4bc9-9051-01ede4cbb2de",
-  "status": "running",
-  "retries": 0,
-  "priority": 5,
-  "created_at": "2024-01-16T09:53:10.517Z",
-  "started_at": "2024-01-16T09:53:11.012Z",
-  "finished_at": null,
-  "error_type": null,
-  "error_msg": null,
-  "result_url": null
+  "doc_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
+  "doc_type": "annual_report",
+  "status": "completed",
+  "created_at": "2025-11-06T16:00:00Z",
+  "started_at": "2025-11-06T16:00:01Z",
+  "finished_at": "2025-11-06T16:00:18Z",
+  "error": null,
+  "seq": 37,
+  "results": {
+    "company_name": {
+      "value": "SEFE Storage GmbH",
+      "confidence": 0.91,
+      "provenance": ["c-017"],
+      "rationale": "Company name identified in shareholder section"
+    }
+  }
 }
 ```
 
-- When `status` is `succeeded`, `result_url` points to the latest metadata version.
+`results` is omitted until the job reaches the `completed` state.
 
 **Error responses**
 - `401 Unauthorized`
-- `404 Not Found` when the job ID is unknown.
+- `404 Not Found` when the job ID is unknown or belongs to another tenant.
 
-### DELETE `/v1/jobs/{job_id}`
-Request cancellation of an in-flight job. Completed jobs return their existing status without changes.
+### POST `/v1/extraction/jobs/{job_id}/cancel`
+Request cancellation of a queued or running extraction job. Terminal jobs return their existing status.
 
 **Success response**
-- `202 Accepted` with `JobCancelResponse`:
+- `202 Accepted` with `ExtractionJobCancelResponse`:
 
 ```json
 {"job_id": "4f3c6857-0405-454a-9695-b868aee81af7", "status": "canceled"}
@@ -156,147 +150,88 @@ Request cancellation of an in-flight job. Completed jobs return their existing s
 - `404 Not Found`
 
 ### WS `/v1/jobs/{job_id}/stream`
-Open a WebSocket connection to receive status updates whenever a job changes state. Messages are JSON objects matching `JobStatusResponse`.
+Subscribe to real-time extraction status updates. Messages implement `ExtractionStatusPayload` and increase the `seq` counter monotonically.
 
 **Authentication**
 - Preferred: send `Authorization: Bearer <jwt>` during the WebSocket handshake.
 - Alternative: provide `?access_token=<jwt>` (or `?token=`) on the query string.
-- For WebSocket clients that require subprotocols, include `Sec-WebSocket-Protocol: access_token=<jwt>`.
+- For clients requiring subprotocols, include `Sec-WebSocket-Protocol: access_token=<jwt>`.
 
 Requests without a valid token are closed with code `1008` and a descriptive reason.
 
 **Message flow**
 - The server accepts the connection only if the job exists; otherwise it returns a `1008` `Job not found` close.
-- On connect, the first payload mirrors `GET /v1/jobs/{job_id}`.
-- Subsequent payloads are sent whenever the job record changes; idle periods are polled roughly every 500 ms.
-- After the job reaches a terminal state (`succeeded`, `failed`, `canceled`), the server closes the socket with code `1000` (normal closure). Clients may also close the connection at any time.
+- On connect, the first payload mirrors `GET /v1/extraction/jobs/{job_id}` if the job already finished, or emits the latest event otherwise.
+- Subsequent payloads stream events (`job.started`, `chunk.mapped`, `attribute.*`, `job.partial`) until a terminal `job.completed`, `job.failed`, or `job.canceled` event is sent.
+- After the job reaches a terminal state the server closes the socket with code `1000` (normal closure).
 
-**Example payload**
+**Example terminal payload**
 
 ```json
 {
+  "seq": 37,
+  "timestamp": "2025-11-06T16:00:18Z",
   "job_id": "4f3c6857-0405-454a-9695-b868aee81af7",
-  "document_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
-  "tenant_id": "22a4c3b4-6c1a-4f75-8a3a-63f0d5c2279a",
-  "status": "running",
-  "retries": 0,
-  "priority": 5,
-  "created_at": "2024-02-16T09:55:03.144Z",
-  "started_at": "2024-02-16T09:55:05.421Z",
-  "finished_at": null,
-  "error_type": null,
-  "error_msg": null,
-  "result_url": null
+  "doc_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
+  "doc_type": "annual_report",
+  "event": "job.completed",
+  "status": "completed",
+  "progress": null,
+  "attribute": null,
+  "provenance": null,
+  "summary": null,
+  "errors": null,
+  "attributes": null,
+  "results": {
+    "company_name": {"value": "SEFE Storage GmbH", "confidence": 0.91, "provenance": ["c-017"]}
+  }
 }
 ```
 
-## Documents
+## Manual Metadata
 
 ### GET `/v1/documents/{document_id}/metadata`
-Fetch a specific or latest metadata version.
-
-**Query string**
-
-| Name | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `version` | string \| null | `"latest"` | Supports `"latest"` or explicit versions like `"v3"` / `"3"`. |
-
-**Success response**
-- `200 OK` with `MetadataVersionResponse`:
-
-```json
-{
-  "document_id": "be9f6304-5ea1-4690-843b-7192617b61d4",
-  "version": 3,
-  "fingerprint": "b407f6955d4f5ef1f6798cbae6e17c1ea401f83d4580598d77077d4a2ee2167a",
-  "extracted_on": "2024-01-16T09:55:03.144Z",
-  "metadata": {
-    "document_type": "Annual Report",
-    "company_name": "Acme Corp",
-    "parent_company": null,
-    "ultimate_parent_company": null,
-    "reporting_date": "2023-12-31",
-    "reporting_year": 2023,
-    "call_date": null,
-    "company_register": "Delaware",
-    "register_number": "1234567",
-    "tags": ["finance", "annual"]
-  }
-}
-```
-
-**Error responses**
-- `401 Unauthorized`
-- `404 Not Found` when no matching document/version exists.
-- `422 Unprocessable Entity` when `version` does not match the regex `latest` or `v<number>`.
+Fetch a specific metadata version. `version` can be `latest` or `v{number}` (e.g. `v3`). The response wraps the stored `MetadataSchema` plus fingerprint and extraction timestamp.
 
 ### PUT `/v1/documents/{document_id}/metadata`
-Persist a manual metadata version without running the extraction agent. The backend increments the version counter unless the incoming payload matches the latest fingerprint exactly.
-
-**Request body**
-
-```json
-{
-  "metadata": {
-    "...": "See MetadataSchema above"
-  }
-}
-```
+Persist a manual metadata payload. If the payload differs from the latest version, the service records a new `MetadataSchema` version.
 
 **Success response**
-- `200 OK` with `MetadataVersionResponse` (same shape as the GET response).
+- `200 OK` with `MetadataVersionResponse` (document ID, new version number, fingerprint, extraction timestamp, payload).
 
 **Error responses**
 - `401 Unauthorized`
-- `422 Unprocessable Entity`
+- `422 Unprocessable Entity` for validation issues.
 
 ### DELETE `/v1/documents/{document_id}`
-Delete a document and cascade-remove all related metadata versions and queued or historical jobs. Use this when a document leaves the corpus or must be reprocessed from scratch.
+Delete a document, its metadata versions, and any extraction jobs. Cascades through the metadata schema.
 
 **Success response**
 - `204 No Content`
 
 **Error responses**
 - `401 Unauthorized`
-- `404 Not Found` when the document is unknown.
+- `404 Not Found`
+
+## Search
 
 ### GET `/v1/documents/search`
-Search the latest metadata version for each document within the authenticated tenant and return matching document IDs alongside their associated digests (if available).
+Search documents by metadata payload. Query strings combine case-insensitive filters joined by `&`. Use `field:value` to constrain a specific metadata field.
 
-**Query string**
-
-| Name | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `q` | string | yes | Supports simple terms (`q=acme`), field filters (`q=company_name:acme inc`), and logical AND combinations using `&` (`q=acme & tag:finance`). Matching is case-insensitive and spans all metadata attributes when no field is specified. |
+**Example**
+- `q=acme&tag:finance`
 
 **Success response**
-- `200 OK` with `DocumentSearchResponse`:
-
-```json
-{
-  "document_ids": [
-    "be9f6304-5ea1-4690-843b-7192617b61d4",
-    "4f3c6857-0405-454a-9695-b868aee81af7"
-  ],
-  "digests": [
-    "62uQY2qCT0ntviGct1xQ6lZvKR7p0mDFNOYYJrmzEqs=",
-    null
-  ]
-}
-```
+- `200 OK` with `DocumentSearchResponse` (`document_ids` + `digests` arrays of equal length).
 
 **Error responses**
-- `400 Bad Request` when the query is empty or references an unknown metadata field.
 - `401 Unauthorized`
+- `400 Bad Request` for malformed filters.
 
-## Health Probes
-- `GET /healthz` → `{"status": "ok"}`
-- `GET /readyz` → `{"status": "ready"}`
+## Health Checks
 
-These endpoints are unauthenticated and intended for platform monitoring.
+### GET `/healthz`
+Always returns `{"status": "ok"}`. Intended for liveness probes.
 
-## Additional Notes for Frontend Integration
-- Prefer using the URLs returned by `status_url` and `result_url` rather than reconstructing paths manually; they already include the correct host and versioning.
-- Jobs are processed asynchronously. Poll `/v1/jobs/{job_id}` until `status` transitions to a terminal state (`succeeded`, `failed`, or `canceled`). A `result_url` is only meaningful once the job succeeds.
-- When supplying `metadata.locked_fields`, ensure the array contains metadata keys exactly as defined in `MetadataSchema`.
-- The backend emits callbacks (POST requests) to `callback_url` only on success; the callback payload mirrors `MetadataVersionResponse`.
+### GET `/readyz`
+Returns `{"status": "ready"}` once the application has completed startup (DB connectivity, configuration, etc.).

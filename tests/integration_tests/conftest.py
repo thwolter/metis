@@ -13,6 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy.engine import make_url
 from tenauth.fastapi import require_access_context, require_auth
 from tenauth.schemas import AccessContext, AuthContext
+from tenauth.websocket import websocket_access_context
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
@@ -20,22 +21,26 @@ from core import db as core_db
 from core.config import get_settings
 from core.db import scoped_session, session_factory
 from main import app as main_app
-from metadata.api import websocket_access_context
 from tests.db import (  # type: ignore[missing-import]
     prepare_database,
     reset_database_state,
     run_migrations,
 )
 
-pytestmark = pytest.mark.integration
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 DEFAULT_ENV_VARS = {
     'JWT_SECRET': 'test-secret',
     'ENV': 'testing',
     'DOCUMENT_STORE': 'local',
+    'OPENAI_API_KEY': 'test-key',
+    'TAVILY_API_KEY': 'test-key',
 }
+
+for key, value in DEFAULT_ENV_VARS.items():
+    os.environ.setdefault(key, value)
+
+pytestmark = pytest.mark.integration
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class AuthenticatedTestClient:
@@ -82,16 +87,6 @@ async def integration_environment() -> AsyncGenerator[None, None]:
 
         get_settings.cache_clear()
 
-        # Rebuild the Dramatiq broker so the worker uses the test Redis instance.
-        from core import (  # noqa: WPS433  Imported lazily for test env
-            broker as broker_module,
-        )
-        from metadata import tasks as metadata_tasks  # noqa: WPS433
-
-        broker_module.reset_broker()
-        new_broker = broker_module.broker
-        metadata_tasks.process_metadata_job.broker = new_broker
-
         if core_db._engine is not None:
             await core_db._engine.dispose()
         core_db._engine = None
@@ -117,8 +112,8 @@ async def _clean_db_between_tests():
     await reset_database_state()
 
 
-tenant_id = UUID('00000000-0000-0000-0000-000000000000')
-user_id = UUID('00000000-0000-0000-0000-000000000000')
+tenant_id = UUID('f74c8bfb-6372-4f61-b7b7-f4ae7c0abfde')
+user_id = UUID('11111111-1111-1111-1111-111111111111')
 
 
 @pytest.fixture
