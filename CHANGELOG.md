@@ -1,3 +1,16 @@
+## 0.5.0 (2025-11-06)
+
+### Feat
+
+- **classification**: replace `_fetch_doc_vectors_by_digests` with `fetch_doc_vectors_by_digests` and add classification logging
+- **classification**: extend API and add tests for recompute, online update, and prediction
+- **classification**: implement and refine end-to-end classification pipeline with schema, embeddings, and tests
+- **metadata**: add classification models and related dependencies
+
+### Refactor
+
+- **tests**: centralize and reuse fixture-loading logic
+
 ## 0.4.1 (2025-11-02)
 
 ### Refactor
