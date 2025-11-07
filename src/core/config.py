@@ -4,7 +4,23 @@ from typing import Any, Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import SettingsConfigDict
 
-from .utils import ValidatedSettings, load_version, parse_cors_origins
+from .utils import ValidatedModel, ValidatedSettings, load_version, parse_cors_origins
+
+
+class OTLPSettings(ValidatedModel):
+    endpoint: str | None = None
+    headers: str | None = None
+    logs_enabled: bool = False
+    traces_enabled: bool = True
+    metrics_enabled: bool = True
+
+
+class ExtractionSettings(ValidatedModel):
+    default_model: str = 'openai:gpt-4o-mini'
+    model_version: str = '2025-01-01'
+    max_chunks: int = 6
+    top_m: int = 3
+    header_boost: float = 0.5
 
 
 class Settings(ValidatedSettings):
@@ -12,6 +28,7 @@ class Settings(ValidatedSettings):
         env_file='.env',  # let pydantic-settings read .env
         case_sensitive=False,  # typical for envs
         extra='ignore',  # ignore unknown env vars
+        env_nested_delimiter='__',
     )
 
     required_keys = ['postgres_url', 'redis_url', 'openai_api_key', 'tavily_api_key']
@@ -29,22 +46,14 @@ class Settings(ValidatedSettings):
     tavily_api_key: SecretStr | None = None
 
     log_level: Literal['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'] = 'INFO'
-    otlp_endpoint: str | None = None
-    otlp_headers: str | None = None
-    otel_logs_enabled: bool = False
-    otel_traces_enabled: bool = True
-    otel_metrics_enabled: bool = True
+    otlp: OTLPSettings = Field(default_factory=OTLPSettings)
     jwt_secret: SecretStr = SecretStr('dev-internal-token')
 
     metadata_schema: str = 'metadata'
     classification_schema: str = 'classification'
     pg_vector_schema: str = 'vectra'
 
-    extraction_default_model: str = 'openai:gpt-4o-mini'
-    extraction_model_version: str = '2025-01-01'
-    extraction_max_chunks: int = 6
-    extraction_top_m: int = 3
-    extraction_header_boost: float = 0.5
+    extraction: ExtractionSettings = Field(default_factory=ExtractionSettings)
 
     cors_allow_origins: tuple[str, ...] = ()
 

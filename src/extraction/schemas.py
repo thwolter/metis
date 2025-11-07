@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from extraction.models import ExtractionJobStatus
 from utils.types import SHA256B64
 
 
@@ -205,7 +206,7 @@ class ExtractionStatusPayload(BaseModel):
     doc_id: UUID
     doc_type: str
     event: StatusEvent
-    status: Literal['queued', 'running', 'completed', 'failed']
+    status: ExtractionJobStatus
     progress: ProgressSnapshot | None = None
     attribute: dict[str, Any] | None = None
     provenance: dict[str, Any] | None = None

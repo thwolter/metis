@@ -95,7 +95,7 @@ def slow_map_extractor(monkeypatch: pytest.MonkeyPatch):
     return started, unblock
 
 
-async def _poll_job_status(client: AsyncClient, job_id: UUID, *, timeout: float = 2.0) -> dict:
+async def _poll_job_status(client: AsyncClient, job_id: UUID, *, timeout: float = 10.0) -> dict:
     deadline = asyncio.get_event_loop().time() + timeout
     while True:
         response = await client.get(f'/v1/extraction/jobs/{job_id}')
@@ -112,7 +112,12 @@ async def _poll_job_status(client: AsyncClient, job_id: UUID, *, timeout: float 
         await asyncio.sleep(0.05)
 
 
-async def test_run_extraction_persists_results(auth_client: AsyncClient, auth_session, stub_map_extractor):
+async def test_run_extraction_persists_results(
+    auth_client: AsyncClient,
+    auth_session,
+    stub_map_extractor,
+    dramatiq_worker,
+):
     doc_id = uuid4()
     payload = {
         'doc_id': str(doc_id),
@@ -140,7 +145,12 @@ async def test_run_extraction_persists_results(auth_client: AsyncClient, auth_se
     assert values == {'company_name': 'SEFE Storage GmbH', 'register_number': 'HRB 18372'}
 
 
-async def test_cancel_extraction_job(auth_client: AsyncClient, auth_session, slow_map_extractor):
+async def test_cancel_extraction_job(
+    auth_client: AsyncClient,
+    auth_session,
+    slow_map_extractor,
+    dramatiq_worker,
+):
     started, unblock = slow_map_extractor
     doc_id = uuid4()
     payload = {
@@ -172,7 +182,7 @@ async def test_cancel_extraction_job(auth_client: AsyncClient, auth_session, slo
     assert rows == []
 
 
-def test_stream_reports_completion(sync_client, stub_map_extractor):
+def test_stream_reports_completion(sync_client, stub_map_extractor, dramatiq_worker):
     doc_id = uuid4()
     payload = {
         'doc_id': str(doc_id),
@@ -198,4 +208,32 @@ def test_stream_reports_completion(sync_client, stub_map_extractor):
     assert any(evt['event'] == 'job.started' for evt in events)
     final = events[-1]
     assert final['event'] == 'job.completed'
-    assert final['results']['company_name']['value'] == 'SEFE Storage GmbH'
+
+
+async def test_extraction_job_waits_for_worker(
+    auth_client: AsyncClient,
+    stub_map_extractor,
+    dramatiq_worker_controller,
+):
+    payload = {
+        'doc_id': str(uuid4()),
+        'doc_type': 'annual_report',
+        'digest': DIGEST,
+        'collection_name': COLLECTION,
+        'attributes': ['company_name'],
+        'dry_run': False,
+    }
+
+    # Ensure no worker is running so the message stays queued.
+    dramatiq_worker_controller.stop()
+    response = await auth_client.post('/v1/extraction/run', json=payload)
+    job_id = UUID(response.json()['job_id'])
+
+    queued_status = await auth_client.get(f'/v1/extraction/jobs/{job_id}')
+    assert queued_status.json()['status'] == ExtractionJobStatus.QUEUED.value
+
+    # Start the worker and verify the task completes.
+    dramatiq_worker_controller.start()
+    final_status = await _poll_job_status(auth_client, job_id)
+    assert final_status['status'] == ExtractionJobStatus.COMPLETED.value
+    assert final_status['results']['company_name']['value'] == 'SEFE Storage GmbH'

@@ -32,9 +32,10 @@ def _configure_otel_logging(settings: Settings, *, level: int, root_logger: logg
         root_logger.warning('OpenTelemetry SDK not available; skipping OTLP log forwarding.')
         return
 
+    otlp_settings = settings.otlp
     exporter = OTLPLogExporter(
-        endpoint=settings.otlp_endpoint,
-        headers=parse_otlp_headers(settings.otlp_headers),
+        endpoint=otlp_settings.endpoint,
+        headers=parse_otlp_headers(otlp_settings.headers),
     )
     provider = LoggerProvider(resource=resource)
     provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
@@ -62,7 +63,8 @@ def configure_logging() -> None:
         )
     root_logger.setLevel(level)
 
-    if settings.otel_logs_enabled and settings.otlp_endpoint:
+    otlp_settings = settings.otlp
+    if otlp_settings.logs_enabled and otlp_settings.endpoint:
         _configure_otel_logging(settings, level=level, root_logger=root_logger)
 
     _configured = True

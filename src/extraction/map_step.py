@@ -18,7 +18,7 @@ class MapExtractor:
 
     def __init__(self, model: str | None = None, llm: BaseChatModel | None = None):
         settings = get_settings()
-        default_model = getattr(settings, 'extraction_default_model', 'openai:gpt-4o-mini')
+        default_model = settings.extraction.default_model
         self._model_name = model or default_model
         self._llm = llm or init_chat_model(model=self._model_name, temperature=0)
 

@@ -8,6 +8,8 @@ from uuid import UUID
 
 import httpx
 import pytest
+from dramatiq.brokers.stub import StubBroker
+from dramatiq.worker import Worker
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from sqlalchemy.engine import make_url
@@ -55,6 +57,27 @@ class AuthenticatedTestClient:
 
     def __getattr__(self, item: str):
         return getattr(self._async_client, item)
+
+
+class DramatiqWorkerController:
+    def __init__(self, broker):
+        self._broker = broker
+        self._worker: Worker | None = None
+
+    def start(self) -> None:
+        if isinstance(self._broker, StubBroker):
+            return
+        if self._worker is not None:
+            return
+        self._worker = Worker(self._broker, worker_threads=1, worker_timeout=100)
+        self._worker.start()
+
+    def stop(self) -> None:
+        if not self._worker:
+            return
+        self._worker.stop()
+        self._worker.join()
+        self._worker = None
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -196,3 +219,24 @@ async def auth_client() -> AsyncGenerator[AsyncClient]:
 def sync_client() -> TestClient:
     """Synchronous TestClient for WebSocket and in-process tests."""
     return TestClient(main_app)
+
+
+@pytest.fixture()
+def dramatiq_worker_controller():
+    """Provide a controllable Dramatiq worker bound to the app broker."""
+    from core.broker import (
+        broker as dramatiq_broker,  # local import to avoid circular deps
+    )
+
+    controller = DramatiqWorkerController(dramatiq_broker)
+    try:
+        yield controller
+    finally:
+        controller.stop()
+
+
+@pytest.fixture()
+def dramatiq_worker(dramatiq_worker_controller):
+    """Automatically start a Dramatiq worker for tests that require queue processing."""
+    dramatiq_worker_controller.start()
+    return dramatiq_worker_controller

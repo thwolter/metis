@@ -41,7 +41,8 @@ def build_resource(settings: Settings):
 
 def _configure_tracing(settings: Settings, resource) -> None:
     global _tracing_configured
-    if _tracing_configured or not settings.otlp_endpoint or not settings.otel_traces_enabled:
+    otlp_settings = settings.otlp
+    if _tracing_configured or not otlp_settings.endpoint or not otlp_settings.traces_enabled:
         return
 
     try:
@@ -55,8 +56,8 @@ def _configure_tracing(settings: Settings, resource) -> None:
         logger.warning('OpenTelemetry tracing disabled: otlp exporter not available.')
         return
 
-    headers = parse_otlp_headers(settings.otlp_headers)
-    exporter = OTLPSpanExporter(endpoint=settings.otlp_endpoint, headers=headers)
+    headers = parse_otlp_headers(otlp_settings.headers)
+    exporter = OTLPSpanExporter(endpoint=otlp_settings.endpoint, headers=headers)
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -66,7 +67,8 @@ def _configure_tracing(settings: Settings, resource) -> None:
 
 def _configure_metrics(settings: Settings, resource) -> None:
     global _metrics_configured
-    if _metrics_configured or not settings.otlp_endpoint or not settings.otel_metrics_enabled:
+    otlp_settings = settings.otlp
+    if _metrics_configured or not otlp_settings.endpoint or not otlp_settings.metrics_enabled:
         return
 
     try:
@@ -80,8 +82,8 @@ def _configure_metrics(settings: Settings, resource) -> None:
         logger.warning('OpenTelemetry metrics disabled: otlp exporter not available.')
         return
 
-    headers = parse_otlp_headers(settings.otlp_headers)
-    exporter = OTLPMetricExporter(endpoint=settings.otlp_endpoint, headers=headers)
+    headers = parse_otlp_headers(otlp_settings.headers)
+    exporter = OTLPMetricExporter(endpoint=otlp_settings.endpoint, headers=headers)
     reader = PeriodicExportingMetricReader(exporter)
     provider = MeterProvider(resource=resource, metric_readers=[reader])
     metrics.set_meter_provider(provider)

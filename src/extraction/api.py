@@ -6,7 +6,6 @@ from uuid import UUID
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     HTTPException,
     Request,
@@ -25,22 +24,24 @@ from tenauth.session import access_scoped_session_ctx
 from tenauth.websocket import websocket_access_context
 
 from core.config import get_settings
-from core.db import scoped_session, session_factory
+from core.db import session_factory
 from core.deps import SessionDep
-from extraction.events import broker
-from extraction.graph import _resolve_execution_config, run_extraction
-from extraction.models import ExtractedAttribute, ExtractionJob, ExtractionJobStatus
-from extraction.persistence import (
+
+from .events import broker
+from .models import ExtractedAttribute, ExtractionJob, ExtractionJobStatus
+from .persistence import (
     create_extraction_job,
     increment_sequence,
     update_job_status,
 )
-from extraction.schemas import (
+from .schemas import (
     ExtractionRequest,
     ExtractionResult,
     ExtractionStatusPayload,
     StatusEvent,
 )
+from .tasks import queue_extraction_job
+from .utils import resolve_execution_config
 
 router = APIRouter(
     prefix='/v1/extraction',
@@ -133,6 +134,7 @@ def _terminal_event(status: ExtractionJobStatus) -> StatusEvent:
 
 async def _terminal_extraction_payload(session: AsyncSession, job: ExtractionJob) -> dict[str, Any]:
     results = await _load_results(session, job.job_id)
+    results_payload: dict[str, Any] | None = results
     payload = ExtractionStatusPayload(
         seq=job.seq,
         timestamp=_aware(job.finished_at or job.updated_at),
@@ -140,55 +142,16 @@ async def _terminal_extraction_payload(session: AsyncSession, job: ExtractionJob
         doc_id=job.doc_id,
         doc_type=job.doc_type,
         event=_terminal_event(job.status),
-        status=job.status.value,
+        status=job.status,
         progress=None,
         attribute=None,
         provenance=None,
         summary=None,
         errors=[job.error] if job.error else None,
         attributes=None,
-        results=results,
+        results=results_payload,
     )
     return payload.model_dump(mode='json')
-
-
-async def _execute_job(
-    job_id: UUID,
-    request_payload: dict[str, Any],
-    access: AccessContext,
-) -> None:
-    req = ExtractionRequest.model_validate(request_payload)
-    async with scoped_session(access_context=access) as session:
-        job = await session.get(ExtractionJob, job_id)
-        if job is None:
-            return
-        if job.status == ExtractionJobStatus.CANCELED:
-            await session.commit()
-            return
-
-        update_data: dict[str, Any] = {}
-        if req.digest is None:
-            update_data['digest'] = job.document_digest
-        if req.collection_name is None:
-            update_data['collection_name'] = job.collection_name
-        if update_data:
-            req = req.model_copy(update=update_data)
-
-        async def _emit_callback(jid: UUID, payload: dict[str, Any]) -> None:
-            await broker.publish(jid, payload)
-
-        try:
-            await run_extraction(
-                session,
-                req,
-                emit=_emit_callback,
-                job=job,
-            )
-        except Exception:
-            # run_extraction handles status updates; make sure failure does not crash background task
-            pass
-        finally:
-            await session.commit()
 
 
 @router.post(
@@ -199,7 +162,6 @@ async def _execute_job(
 async def run_extraction_endpoint(
     payload: ExtractionRunPayload,
     request: Request,
-    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(SessionDep),
     access: AccessContext = Depends(require_access_context),
 ) -> ExtractionJobResponse:
@@ -213,7 +175,9 @@ async def run_extraction_endpoint(
         )
 
     settings = get_settings()
-    retrieval_config, model_name, model_version = _resolve_execution_config(settings, extraction_request)
+    retrieval_config = resolve_execution_config(settings, extraction_request)
+    model_name = extraction_request.model or settings.extraction.default_model
+    model_version = settings.extraction.model_version
 
     job = await create_extraction_job(
         session,
@@ -229,12 +193,7 @@ async def run_extraction_endpoint(
     )
     await session.commit()
 
-    background_tasks.add_task(
-        _execute_job,
-        job.job_id,
-        extraction_request.model_dump(mode='json'),
-        access,
-    )
+    queue_extraction_job(job_id=job.job_id, request=extraction_request, access=access)
 
     status_url = str(request.url_for('get_extraction_job_status', job_id=str(job.job_id)))
     stream_url = str(request.url_for('stream_job_status', job_id=str(job.job_id)))
