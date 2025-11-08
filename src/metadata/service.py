@@ -26,6 +26,7 @@ async def ensure_document(session: AsyncSession, *, tenant_id: UUID, document_id
         return document
     document = Document(tenant_id=tenant_id, document_id=document_id)
     session.add(document)
+    await session.flush()
     await session.commit()
     return document
 

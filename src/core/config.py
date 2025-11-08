@@ -16,7 +16,7 @@ class OTLPSettings(ValidatedModel):
 
 
 class ExtractionSettings(ValidatedModel):
-    default_model: str = 'openai:gpt-4o-mini'
+    default_model: str = 'openai:gpt-5-mini'
     model_version: str = '2025-01-01'
     max_chunks: int = 6
     top_m: int = 3

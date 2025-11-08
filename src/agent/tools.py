@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig
@@ -8,20 +8,20 @@ from langchain_core.tools import tool
 
 from core.config import get_settings
 from core.db import pg_connect
-from utils.vstore import VECTOR_SCHEMA, get_collection_uuid, get_vectorstore
+from utils.vstore import get_collection_uuid, get_vectorstore
 
 from .schemas import ContextSchema
 
-settings = get_settings()
-
 
 async def get_rows(limit: int, *, context: ContextSchema, offset: int = 0) -> list:
+    settings = get_settings()
+    vector_schema: Final[str] = settings.pg_vector_schema
     conn = await pg_connect(tenant_id=context.tenant_id)
     try:
         collection_uuid = await get_collection_uuid(conn, context.collection_name)
         query = f"""
             SELECT document, cmetadata
-            FROM {VECTOR_SCHEMA}.langchain_pg_embedding
+            FROM {vector_schema}.langchain_pg_embedding
             WHERE collection_id = $1
               AND cmetadata ->> 'digest' = $2
             ORDER BY (cmetadata ->> 'chunk_id')::int ASC

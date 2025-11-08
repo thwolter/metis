@@ -13,11 +13,11 @@ from sqlmodel import select
 
 from classification.models import DocClass
 from classification.service import recompute_class_prototype_batch
+from core import get_settings
 from core.broker import reset_broker
 from core.db import pg_connection, session_factory
 from core.logging import configure_logging
 from metadata.models import Document
-from utils.vstore import VECTOR_SCHEMA
 
 configure_logging()
 reset_broker()
@@ -89,11 +89,11 @@ async def _fetch_labelled_digests_for_class(
     labels = _label_variants(class_name)
     if not labels:
         return set()
-
+    settings = get_settings()
     conditions = ' OR '.join(f"lower(cmetadata->>'{key}') = ANY($1::text[])" for key in _LABEL_KEYS)
     query = f"""
         SELECT DISTINCT cmetadata->>'digest' AS digest
-        FROM {VECTOR_SCHEMA}.langchain_pg_embedding
+        FROM {settings.pg_vector_schema}.langchain_pg_embedding
         WHERE cmetadata ? 'digest'
           AND ({conditions})
     """

@@ -12,6 +12,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from core import get_settings
 from utils import utc_now
 from utils.fields import (
+    auto_uuid_field,
     created_at_field,
     created_by_field,
     tenant_id_field,
@@ -33,7 +34,7 @@ class Document(BaseSQLModel, table=True):
     __table_args__ = ({'schema': APP_SCHEMA},)
 
     tenant_id: UUID = tenant_id_field(primary_key=True)
-    document_id: UUID = Field(primary_key=True)
+    document_id: UUID = auto_uuid_field()
     created_at: datetime = created_at_field()
     updated_at: datetime = updated_at_field()
     created_by: UUID = created_by_field()

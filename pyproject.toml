@@ -14,7 +14,6 @@ dependencies = [
     "langchain>=0.3.27",
     "langchain-core>=0.3.78",
     "langchain-openai>=0.3.35",
-    "langchain-postgres>=0.0.15",
     "langchain-tavily>=0.2.11",
     "langgraph>=0.2.6",
     "notebook>=7.4.7",
@@ -31,6 +30,7 @@ dependencies = [
     "ruff>=0.14.2",
     "psycopg[binary]>=3.2.12",
     "websockets>=15.0.1",
+    "langchain-postgres>=0.0.16",
 ]
 [dependency-groups]
 dev = [

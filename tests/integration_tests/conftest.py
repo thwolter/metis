@@ -35,6 +35,7 @@ DEFAULT_ENV_VARS = {
     'DOCUMENT_STORE': 'local',
     'OPENAI_API_KEY': 'test-key',
     'TAVILY_API_KEY': 'test-key',
+    'REDIS_URL': 'test-redis-url',
 }
 
 for key, value in DEFAULT_ENV_VARS.items():
@@ -90,7 +91,7 @@ async def integration_environment() -> AsyncGenerator[None, None]:
     - Ensures core.db engine is reinitialized
     """
 
-    postgres = PostgresContainer('pgvector/pgvector:pg16')
+    postgres = PostgresContainer('pgvector/pgvector:pg16')  # .with_bind_ports(5432, 55432)
     redis = RedisContainer('redis:6-alpine')
 
     postgres.start()

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourcePerFileMappings">
+    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/1a87f0f8-69d5-41e4-beaf-06cbb7f13452/console.sql" value="1a87f0f8-69d5-41e4-beaf-06cbb7f13452" />
+    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/1a87f0f8-69d5-41e4-beaf-06cbb7f13452/console_1.sql" value="1a87f0f8-69d5-41e4-beaf-06cbb7f13452" />
     <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/a3877172-6140-4d32-836a-c26d8016169b/console.sql" value="a3877172-6140-4d32-836a-c26d8016169b" />
     <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/b3d2bbab-e052-4eda-be9f-e9ab259460e3/console.sql" value="b3d2bbab-e052-4eda-be9f-e9ab259460e3" />
     <file url="file://$PROJECT_DIR$/tests/fixtures/vectra_fixtures.sql" value="2a7e5e46-8732-484e-b11f-5c272d607454" />

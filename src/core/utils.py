@@ -5,7 +5,7 @@ import pathlib
 import tomllib
 import warnings
 from functools import lru_cache
-from typing import ClassVar, Sequence
+from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings
@@ -77,8 +77,8 @@ class ValidatedSettings(BaseSettings):
 
     required_keys: ClassVar[list[str]] = []
 
-    def check_missing_keys(self) -> list[str]:
-        return _check_missing_keys(self)
+    def model_post_init(self, context: Any, /) -> None:
+        _check_missing_keys(self)
 
 
 class ValidatedModel(BaseModel):
@@ -86,8 +86,8 @@ class ValidatedModel(BaseModel):
 
     required_keys: ClassVar[list[str]] = []
 
-    def check_missing_keys(self) -> list[str]:
-        return _check_missing_keys(self)
+    def model_post_init(self, context: Any, /) -> None:
+        _check_missing_keys(self)
 
 
 class FingerprintMixin(BaseModel):

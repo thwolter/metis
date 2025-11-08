@@ -7,9 +7,9 @@ import numpy as np
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from core import get_settings
 from core.db import pg_connection
 from metadata.service import ensure_document
-from utils.vstore import VECTOR_SCHEMA
 
 from .models import ClassificationRun, ClassPrototype, DocClass
 from .utils import l2, normalise_vector
@@ -42,6 +42,7 @@ async def fetch_doc_vectors_by_digests(
     if not digests:
         return {}
 
+    settings = get_settings()
     doc_rows: dict[str, list[np.ndarray]] = {}
 
     async with pg_connection(tenant_id=None) as conn:
@@ -49,7 +50,7 @@ async def fetch_doc_vectors_by_digests(
         rows = await conn.fetch(
             f"""
             SELECT (cmetadata->>'digest') AS digest, embedding
-            FROM {VECTOR_SCHEMA}.langchain_pg_embedding
+            FROM {settings.pg_vector_schema}.langchain_pg_embedding
             WHERE (cmetadata->>'digest') = ANY ($1::text[])
             """,
             list(digests),

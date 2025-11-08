@@ -78,6 +78,17 @@ def _hint_bonus(text: str, hints: Iterable[str], weight: float) -> float:
     return score
 
 
+async def _build_search_query(attribute: AttributeSpec) -> str:
+    hints = list(attribute.hints)
+    queries = [' '.join(part for part in (attribute.name.replace('_', ' '), attribute.description) if part)]
+    if hints:
+        queries.append(' '.join(hints))
+    if attribute.regex_hint:
+        queries.append(attribute.regex_hint)
+    query = ' '.join(q for q in queries if q)
+    return query
+
+
 async def retrieve_chunks(
     session: AsyncSession,
     *,
@@ -92,34 +103,27 @@ async def retrieve_chunks(
     Hybrid retrieval for the attribute-centric extraction pipeline.
     """
     vs = get_vectorstore(collection_name=collection_name, tenant_id=tenant_id)
-    hints = list(attribute.hints)
-    queries = [' '.join(part for part in (attribute.name.replace('_', ' '), attribute.description) if part)]
-    if hints:
-        queries.append(' '.join(hints))
-    if attribute.regex_hint:
-        queries.append(attribute.regex_hint)
-    query = ' '.join(q for q in queries if q)
+    query = await _build_search_query(attribute)
 
-    docs: list[Document] = await vs.asearch(
+    results: list[tuple[Document, float]] = await vs.asimilarity_search_with_score(
         query,
-        search_type='similarity',
-        k=max(config.max_chunks * 2, config.max_chunks),
+        k=config.max_chunks * 2,
         filter={'$and': [{'digest': {'$eq': digest}}]},
     )
     header_weights = await _load_header_weights(session, doc_type)
 
     scored: list[tuple[float, Document]] = []
-    for doc in docs:
+    for doc, base_score in results:
         metadata = doc.metadata or {}
         header = _compose_header(metadata)
-        base_score = float(metadata.get('score') or metadata.get('similarity') or metadata.get('distance') or 0.0)
+        base_score = float(base_score)
         # PGVector returns distance; convert to similarity if negative.
         if base_score < 0:
             base_score = 1 / (1 + math.exp(base_score))
 
         bonus = 0.0
         bonus += _header_bonus(header, header_weights, config.header_boost)
-        bonus += _hint_bonus(doc.page_content, hints, config.hints_weight)
+        bonus += _hint_bonus(doc.page_content, attribute.hints, config.hints_weight)
         scored.append((base_score * config.semantic_weight + bonus, doc))
 
     scored.sort(key=lambda item: item[0], reverse=True)

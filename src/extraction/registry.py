@@ -68,7 +68,6 @@ def annual_report_attributes() -> tuple[AttributeSpec, ...]:
             description='The name of the company.',
             hints=['company name', 'issuer'],
             thresholds=base_thresholds,
-            normaliser='title_case',
         ),
         AttributeSpec(
             name='parent_company',

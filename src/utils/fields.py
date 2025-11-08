@@ -10,6 +10,17 @@ from core.config import get_settings
 APP_SCHEMA = get_settings().metadata_schema
 
 
+def auto_uuid_field() -> Any:
+    """UUID primary key column with server default gen_random_uuid()."""
+    return Field(
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            primary_key=True,
+            server_default=text('gen_random_uuid()'),
+        )
+    )
+
+
 def created_at_field() -> Any:
     """UTC created_at timestamp with default now()."""
     return Field(
