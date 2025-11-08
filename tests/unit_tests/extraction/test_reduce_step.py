@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from extraction.reduce_step import reduce_candidates
 from extraction.schemas import Candidate, RetrievalMetadata
+from extraction.tools.reduce_step import reduce_candidates
 
 
 def make_candidate(value, confidence, chunk_id, retr_score) -> Candidate:

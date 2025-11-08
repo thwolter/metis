@@ -5,7 +5,7 @@ import re
 from datetime import date, datetime
 from typing import Any, Callable, Iterable, Sequence
 
-from .schemas import (
+from extraction.schemas import (
     AttributeConstraints,
     AttributeResult,
     AttributeSpec,
@@ -170,7 +170,7 @@ def _normalise_list(values: Iterable[Any]) -> list[str]:
     return normalised
 
 
-def validate_and_normalise(value: Any, spec: AttributeSpec) -> tuple[Any | None, list[ValidationIssue]]:
+def _validate_and_normalise(value: Any, spec: AttributeSpec) -> tuple[Any | None, list[ValidationIssue]]:
     issues: list[ValidationIssue] = []
     result = value
 
@@ -258,8 +258,8 @@ def apply_validation(
     chunk_count: int,
     provenance: Sequence[str],
 ) -> AttributeResult:
-    normalised_value, issues = validate_and_normalise(value, attribute)
-    status = 'accepted' if not issues else 'accepted'
+    normalised_value, issues = _validate_and_normalise(value, attribute)
+    status = 'accepted' if not issues else 'abstained'
     return AttributeResult(
         name=attribute.name,
         value=normalised_value,
@@ -267,5 +267,5 @@ def apply_validation(
         provenance=tuple(provenance),
         validation_issues=tuple(issues),
         chunk_count=chunk_count,
-        status=status,
+        status=status,  # type: ignore
     )

@@ -111,12 +111,7 @@ async def integration_environment() -> AsyncGenerator[None, None]:
 
         get_settings.cache_clear()
 
-        if core_db._engine is not None:
-            await core_db._engine.dispose()
-        core_db._engine = None
-        # Reset sessionmaker to avoid cross-event-loop reuse
-        if getattr(core_db, '_sessionmaker', None) is not None:
-            core_db._sessionmaker = None
+        await core_db.dispose_engines()
 
         run_migrations()
         await reset_database_state()

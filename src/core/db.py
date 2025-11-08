@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import UUID
+from weakref import WeakKeyDictionary
 
 import asyncpg
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
@@ -12,27 +14,43 @@ from tenauth.session import access_scoped_session_ctx
 
 from core.config import get_settings
 
-_engine: AsyncEngine | None = None
-_sessionmaker: async_sessionmaker[AsyncSession] | None = None
+Loop = asyncio.AbstractEventLoop
+SessionFactory = async_sessionmaker[AsyncSession]
+
+_engine_cache: WeakKeyDictionary[Loop, AsyncEngine] = WeakKeyDictionary()
+_sessionmaker_cache: WeakKeyDictionary[Loop, SessionFactory] = WeakKeyDictionary()
+
+
+def _current_loop() -> Loop:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError as exc:  # pragma: no cover - defensive guard
+        raise RuntimeError('A running event loop is required to access the async engine') from exc
 
 
 def get_engine() -> AsyncEngine:
-    global _engine
-    if _engine is None:
+    loop = _current_loop()
+    engine = _engine_cache.get(loop)
+    if engine is None:
         settings = get_settings()
         url = settings.async_postgres_url.get_secret_value()
-        _engine = create_async_engine(url, echo=settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
-    return _engine
+        engine = create_async_engine(url, echo=settings.debug or False, pool_pre_ping=True, pool_recycle=3600)
+        _engine_cache[loop] = engine
+    return engine
+
+
+def _get_sessionmaker() -> SessionFactory:
+    loop = _current_loop()
+    sessionmaker = _sessionmaker_cache.get(loop)
+    if sessionmaker is None:
+        sessionmaker = async_sessionmaker(bind=get_engine(), class_=AsyncSession, expire_on_commit=False)
+        _sessionmaker_cache[loop] = sessionmaker
+    return sessionmaker
 
 
 @asynccontextmanager
 async def session_factory() -> AsyncIterator[AsyncSession]:
-    global _sessionmaker
-
-    if _sessionmaker is None:
-        _sessionmaker = async_sessionmaker(bind=get_engine(), class_=AsyncSession, expire_on_commit=False)
-
-    session = _sessionmaker()
+    session = _get_sessionmaker()()
     try:
         yield session
     except Exception:
@@ -80,3 +98,12 @@ async def pg_connection(tenant_id: UUID | None) -> AsyncIterator[asyncpg.Connect
         yield conn
     finally:
         await conn.close()
+
+
+async def dispose_engines() -> None:
+    """Dispose every cached engine and clear per-loop session factories."""
+    engines = list(_engine_cache.values())
+    _engine_cache.clear()
+    _sessionmaker_cache.clear()
+    for engine in engines:
+        await engine.dispose()

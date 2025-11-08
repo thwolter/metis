@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Hashable, Sequence
 
-from .schemas import Candidate, ReduceAggregate
+from extraction.schemas import Candidate, ReduceAggregate
 
 
 def _normalise_key(value: Any) -> Hashable:

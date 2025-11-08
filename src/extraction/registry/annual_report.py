@@ -1,53 +1,9 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Iterable, Mapping
 
-from .schemas import AttributeConstraints, AttributeSpec, AttributeType, Thresholds
-
-
-class UnknownDocumentTypeError(ValueError):
-    """Raised when the registry does not contain the requested document type."""
-
-
-class UnknownAttributeError(ValueError):
-    """Raised when a document type does not define the requested attribute."""
-
-
-_REGISTRY: dict[str, dict[str, AttributeSpec]] = {}
-
-
-def _register(doc_type: str, specs: Iterable[AttributeSpec]) -> None:
-    doc_type_norm = doc_type.lower()
-    bucket = _REGISTRY.setdefault(doc_type_norm, {})
-    for spec in specs:
-        bucket[spec.name] = spec
-
-
-def get_registry() -> Mapping[str, Mapping[str, AttributeSpec]]:
-    return _REGISTRY
-
-
-def get_attributes(doc_type: str) -> Mapping[str, AttributeSpec]:
-    doc_type_norm = doc_type.lower()
-    if doc_type_norm not in _REGISTRY:
-        msg = f'Unknown document type: {doc_type}'
-        raise UnknownDocumentTypeError(msg)
-    return _REGISTRY[doc_type_norm]
-
-
-def get_attribute_specs(doc_type: str, attribute_names: Iterable[str] | None = None) -> list[AttributeSpec]:
-    attributes = get_attributes(doc_type)
-    if attribute_names is None:
-        return list(attributes.values())
-
-    specs: list[AttributeSpec] = []
-    for name in attribute_names:
-        if name not in attributes:
-            msg = f'Attribute {name} not registered for doc_type {doc_type}'
-            raise UnknownAttributeError(msg)
-        specs.append(attributes[name])
-    return specs
+from ..schemas import AttributeConstraints, AttributeSpec, AttributeType, Thresholds
+from .registry import register
 
 
 @lru_cache(maxsize=1)
@@ -55,13 +11,6 @@ def annual_report_attributes() -> tuple[AttributeSpec, ...]:
     base_thresholds = Thresholds(min_confidence=0.65, min_chunks=1)
 
     return (
-        AttributeSpec(
-            name='document_type',
-            type=AttributeType.STRING,
-            description='The type of document, e.g. "Annual Report".',
-            thresholds=base_thresholds,
-            normaliser='lowercase',
-        ),
         AttributeSpec(
             name='company_name',
             type=AttributeType.STRING,
@@ -165,4 +114,4 @@ def annual_report_attributes() -> tuple[AttributeSpec, ...]:
     )
 
 
-_register('annual_report', annual_report_attributes())
+register('annual_report', annual_report_attributes())

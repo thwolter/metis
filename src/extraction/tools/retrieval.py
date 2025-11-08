@@ -9,9 +9,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from classification.models import HeaderWeight
+from extraction.schemas import AttributeSpec, RetrievalConfig, RetrievedChunk
 from utils.vstore import get_vectorstore
-
-from .schemas import AttributeSpec, RetrievalConfig, RetrievedChunk
 
 HEADER_KEYS = ('header', 'Header 1', 'Header 2', 'Header 3', 'Header 4')
 

@@ -45,12 +45,7 @@ async def reset_database_state() -> None:
     finally:
         await engine.dispose()
 
-    if core_db._engine is not None:
-        await core_db._engine.dispose()
-        core_db._engine = None
-        # Also reset sessionmaker to avoid cross-event-loop issues with cached session factories
-        if getattr(core_db, '_sessionmaker', None) is not None:
-            core_db._sessionmaker = None
+    await core_db.dispose_engines()
 
 
 async def _execute_sql_scripts(connection_url: URL, directory: Path) -> None:

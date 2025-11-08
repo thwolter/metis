@@ -4,8 +4,6 @@ from collections.abc import Sequence
 from typing import Any
 
 from ..persistence import persist_attribute
-from ..reduce_step import reduce_candidates
-from ..retrieval import retrieve_chunks
 from ..schemas import (
     AttributeResult,
     AttributeSpec,
@@ -15,7 +13,7 @@ from ..schemas import (
     Thresholds,
 )
 from ..thresholds import abstain_output, passes_thresholds
-from ..validate import apply_validation
+from ..tools import apply_validation, reduce_candidates, retrieve_chunks
 from .context import ExtractionContext
 from .progress import AttributeState
 

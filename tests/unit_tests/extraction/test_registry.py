@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from extraction.registry import (
+from extraction.registry.registry import (
     UnknownAttributeError,
     UnknownDocumentTypeError,
     get_attribute_specs,

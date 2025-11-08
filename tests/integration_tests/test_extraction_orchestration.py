@@ -10,10 +10,10 @@ from extraction.graph.context import ExtractionContext
 from extraction.graph.orchestration import _prepare_job, _process_attribute
 from extraction.graph.progress import AttributeState, ProgressTracker
 from extraction.graph.status import StatusEmitter
-from extraction.map_step import MapExtractor
 from extraction.models import ExtractedAttribute
-from extraction.registry import get_attribute_specs
+from extraction.registry.registry import get_attribute_specs
 from extraction.schemas import Candidate, ExtractionRequest, RetrievalMetadata
+from extraction.tools.map_step import MapExtractor
 from extraction.utils import resolve_execution_config
 from tests.utils import load_fixtures  # type: ignore[import]
 

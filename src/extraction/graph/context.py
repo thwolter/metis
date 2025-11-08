@@ -6,9 +6,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from extraction.graph.progress import AttributeState, ProgressTracker
 from extraction.graph.status import BrokerCallback, StatusEmitter
-from extraction.map_step import MapExtractor
 from extraction.models import ExtractionJob, ExtractionJobStatus
 from extraction.schemas import ExtractionRequest, RetrievalConfig
+from extraction.tools.map_step import MapExtractor
 
 
 class ExtractionCancelledError(Exception):

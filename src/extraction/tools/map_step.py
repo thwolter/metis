@@ -8,9 +8,13 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from core.config import get_settings
-
-from .prompts import map_prompt_messages
-from .schemas import AttributeSpec, Candidate, RetrievalMetadata, RetrievedChunk
+from extraction.prompts import map_prompt_messages
+from extraction.schemas import (
+    AttributeSpec,
+    Candidate,
+    RetrievalMetadata,
+    RetrievedChunk,
+)
 
 
 class MapExtractor:

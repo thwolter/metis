@@ -5,10 +5,10 @@ from collections.abc import Awaitable, Callable, Sequence
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from core.config import get_settings
+from extraction.registry.registry import get_attribute_specs
 
 from ..models import ExtractionJob, ExtractionJobStatus
 from ..persistence import create_extraction_job, update_job_status
-from ..registry import get_attribute_specs
 from ..schemas import (
     AttributeResult,
     AttributeSpec,

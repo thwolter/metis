@@ -7,9 +7,9 @@ import pytest
 from httpx import AsyncClient
 from sqlmodel import select
 
-from extraction.map_step import MapExtractor
 from extraction.models import ExtractedAttribute, ExtractionJobStatus
 from extraction.schemas import Candidate, RetrievalMetadata
+from extraction.tools.map_step import MapExtractor
 from tests.utils import load_fixtures  # type: ignore[import]
 
 pytestmark = pytest.mark.integration
