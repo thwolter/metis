@@ -29,9 +29,7 @@ class ExtractionContext:
     attribute_states: dict[str, AttributeState]
 
     async def ensure_active(self) -> None:
-        print('ensure_active refresh start', self.job.job_id)
         await self.session.refresh(self.job)
-        print('ensure_active refresh done', self.job.job_id, self.job.status)
         if self.job.status == ExtractionJobStatus.CANCELED:
             raise ExtractionCancelledError()
 

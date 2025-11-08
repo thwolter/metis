@@ -7,6 +7,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from metadata.service import ensure_document
+from utils import utc_now
 
 from .models import ExtractedAttribute, ExtractionJob, ExtractionJobStatus
 from .registry import AttributeSpec
@@ -52,16 +53,12 @@ async def update_job_status(
 ) -> ExtractionJob:
     job.status = status
     if status == ExtractionJobStatus.RUNNING and job.started_at is None:
-        from metadata.models import utc_now  # lazy import to avoid cycle
-
         job.started_at = utc_now()
     if status in {
         ExtractionJobStatus.COMPLETED,
         ExtractionJobStatus.FAILED,
         ExtractionJobStatus.CANCELED,
     }:
-        from metadata.models import utc_now
-
         job.finished_at = utc_now()
     job.error = error
     session.add(job)

@@ -14,19 +14,19 @@ from agent.schemas import MetadataSchema
 from metadata.models import Document, DocumentMetadata
 
 _FIELD_ALIASES = {'tag': 'tags'}
-_METADATA_FIELDS = {name.lower(): name for name in MetadataSchema.model_fields}
+_METADATA_FIELDS = {name.lower(): name for name in MetadataSchema.model_fields.keys()}
 
 
 async def ensure_document(session: AsyncSession, *, tenant_id: UUID, document_id: UUID) -> Document:
     """
     Ensure a metadata.Document row exists for the given tenant/document pair.
     """
-    document = await session.get(Document, (tenant_id, document_id))
+    document: Document | None = await session.get(Document, (tenant_id, document_id))
     if document is not None:
         return document
     document = Document(tenant_id=tenant_id, document_id=document_id)
     session.add(document)
-    await session.flush()
+    await session.commit()
     return document
 
 

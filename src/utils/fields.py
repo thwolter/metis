@@ -57,12 +57,13 @@ def updated_by_field() -> Any:
     )
 
 
-def tenant_id_field() -> Any:
+def tenant_id_field(*, primary_key: bool = False) -> Any:
     """Tenant id column populated from PostgreSQL setting app.tenant_id."""
     return Field(
         sa_column=Column(
             PGUUID(as_uuid=True),
             nullable=False,
+            primary_key=primary_key,
             server_default=text("current_setting('app.tenant_id', true)::uuid"),
         )
     )

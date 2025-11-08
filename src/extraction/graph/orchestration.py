@@ -5,7 +5,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from core.config import get_settings
-from metadata.models import utc_now
 
 from ..models import ExtractionJob, ExtractionJobStatus
 from ..persistence import create_extraction_job, update_job_status
@@ -43,7 +42,30 @@ async def _prepare_job(
     job: ExtractionJob | None,
     retrieval_config: RetrievalConfig,
     settings,
-) -> tuple[ExtractionJob, str, str, str, str]:
+) -> ExtractionJob:
+    """
+    Prepares an extraction job by creating or updating it based on the provided
+    request, job, and configuration. The method establishes necessary configuration
+    parameters, validates required fields, and ensures the job is in a RUNNING status.
+
+    Parameters:
+    - session (AsyncSession): Asynchronous database session used for job creation or
+      updates.
+    - request (ExtractionRequest): The extraction request containing document details
+      and options.
+    - job (ExtractionJob | None): Existing extraction job to be updated, or None if a
+      new job needs to be created.
+    - retrieval_config (RetrievalConfig): Configuration data to be utilized by the job's
+      retriever.
+    - settings: Configuration settings potentially used to extract model name and version.
+
+    Raises:
+    - ValueError: If 'digest', 'collection_name', or 'tenant_id' are not provided for the
+      extraction process.
+
+    Returns:
+    ExtractionJob: The prepared or updated extraction job in a RUNNING state.
+    """
     model_name = _get_model_name(job, request, settings)
     model_version = _get_model_version(job, settings)
     digest = job.document_digest if job else request.digest
@@ -78,8 +100,7 @@ async def _prepare_job(
         job.options = {'dry_run': request.dry_run}
         session.add(job)
 
-    job = await update_job_status(session, job, status=ExtractionJobStatus.RUNNING)
-    return job, model_name, model_version, digest, collection_name
+    return await update_job_status(session, job, status=ExtractionJobStatus.RUNNING)
 
 
 async def _process_attribute(context: ExtractionContext, spec: AttributeSpec) -> AttributeResult:
@@ -131,27 +152,10 @@ async def run_extraction(
     settings = get_settings()
     retrieval_config = resolve_execution_config(settings, request)
 
-    (
-        job,
-        model_name,
-        model_version,
-        digest,
-        collection_name,
-    ) = await _prepare_job(session, request, job, retrieval_config, settings)
-
+    job = await _prepare_job(session, request, job, retrieval_config, settings)
     if job.status == ExtractionJobStatus.CANCELED:
         cancel_msg = job.error or 'canceled by user'
-        return ExtractionResult(
-            job_id=job.job_id,
-            doc_id=request.doc_id,
-            doc_type=request.doc_type,
-            attributes={},
-            model=model_name,
-            model_version=model_version,
-            started_at=job.started_at or utc_now(),
-            completed_at=job.finished_at,
-            errors=[cancel_msg],
-        )
+        return ExtractionResult.from_job(job, error_msg=cancel_msg)
 
     attribute_specs = get_attribute_specs(request.doc_type, request.attributes)
     progress = ProgressTracker(total_attributes=len(attribute_specs))
@@ -162,9 +166,9 @@ async def run_extraction(
         request=request,
         job=job,
         retrieval_config=retrieval_config,
-        digest=digest,
-        collection_name=collection_name,
-        model_name=model_name,
+        digest=job.document_digest,
+        collection_name=job.collection_name,
+        model_name=job.model,
         emit=emit,
         progress=progress,
         attribute_states=states,
@@ -218,17 +222,7 @@ async def run_extraction(
         )
         raise
 
-    return ExtractionResult(
-        job_id=job.job_id,
-        doc_id=request.doc_id,
-        doc_type=request.doc_type,
-        attributes=results,
-        model=model_name,
-        model_version=model_version,
-        started_at=job.started_at or utc_now(),
-        completed_at=job.finished_at,
-        errors=errors,
-    )
+    return ExtractionResult.from_job(job, attributes=results, error_msg=errors)
 
 
 def build_extraction_graph() -> Callable[[AsyncSession, ExtractionRequest], Awaitable[ExtractionResult]]:

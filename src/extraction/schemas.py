@@ -7,7 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from extraction.models import ExtractionJobStatus
+from extraction.models import ExtractionJob, ExtractionJobStatus
+from utils import utc_now
 from utils.types import SHA256B64
 
 
@@ -159,6 +160,37 @@ class ExtractionResult(BaseModel):
     started_at: datetime
     completed_at: datetime | None
     errors: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def _normalize_error_msg(cls, error_msg: str | list | None) -> list[Any]:
+        if error_msg is None:
+            return []
+        elif isinstance(error_msg, list):
+            return error_msg
+        else:
+            return [error_msg]
+
+    @classmethod
+    def from_job(
+        cls,
+        job: ExtractionJob,
+        *,
+        error_msg: str | list | None = None,
+        attributes: dict[str, AttributeResult] | None = None,
+    ) -> ExtractionResult:
+        errors = cls._normalize_error_msg(error_msg)
+
+        return ExtractionResult(
+            job_id=job.job_id,
+            doc_id=job.doc_id,
+            doc_type=job.doc_type,
+            attributes=attributes or {},
+            model=job.model,
+            model_version=job.model_version,
+            started_at=job.started_at or utc_now(),
+            completed_at=job.finished_at,
+            errors=errors,
+        )
 
 
 class StatusEvent(str, Enum):

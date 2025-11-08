@@ -3,12 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from extraction.graph.context import ExtractionContext
-from extraction.graph.progress import AttributeState
-from extraction.persistence import persist_attribute
-from extraction.reduce_step import reduce_candidates
-from extraction.retrieval import retrieve_chunks
-from extraction.schemas import (
+from ..persistence import persist_attribute
+from ..reduce_step import reduce_candidates
+from ..retrieval import retrieve_chunks
+from ..schemas import (
     AttributeResult,
     AttributeSpec,
     Candidate,
@@ -16,8 +14,10 @@ from extraction.schemas import (
     StatusEvent,
     Thresholds,
 )
-from extraction.thresholds import abstain_output, passes_thresholds
-from extraction.validate import apply_validation
+from ..thresholds import abstain_output, passes_thresholds
+from ..validate import apply_validation
+from .context import ExtractionContext
+from .progress import AttributeState
 
 
 def _default_thresholds() -> Thresholds:

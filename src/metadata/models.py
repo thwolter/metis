@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -10,19 +10,16 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlmodel import Field, Relationship, SQLModel
 
 from core import get_settings
+from utils import utc_now
 from utils.fields import (
     created_at_field,
     created_by_field,
+    tenant_id_field,
     updated_at_field,
     updated_by_field,
 )
 
 APP_SCHEMA = get_settings().metadata_schema
-
-
-def utc_now() -> datetime:
-    """Return a timezone-naive UTC datetime for TIMESTAMP WITHOUT TIME ZONE columns."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class BaseSQLModel(SQLModel):
@@ -35,7 +32,7 @@ class Document(BaseSQLModel, table=True):
     __tablename__ = 'documents'  # type: ignore[bad-argument-type]
     __table_args__ = ({'schema': APP_SCHEMA},)
 
-    tenant_id: UUID = Field(primary_key=True)
+    tenant_id: UUID = tenant_id_field(primary_key=True)
     document_id: UUID = Field(primary_key=True)
     created_at: datetime = created_at_field()
     updated_at: datetime = updated_at_field()
@@ -67,7 +64,7 @@ class DocumentMetadata(BaseSQLModel, table=True):
         {'schema': APP_SCHEMA},
     )
 
-    tenant_id: UUID = Field(primary_key=True)
+    tenant_id: UUID = tenant_id_field(primary_key=True)
     document_id: UUID = Field(primary_key=True)
     version: int = Field(primary_key=True)
     fingerprint: str

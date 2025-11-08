@@ -11,7 +11,7 @@ from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
 
 from core import get_settings
-from utils.fields import created_at_field, updated_at_field
+from utils.fields import created_at_field, tenant_id_field, updated_at_field
 
 APP_SCHEMA = get_settings().metadata_schema
 
@@ -42,7 +42,7 @@ class ExtractionJob(BaseExtractionModel, table=True):
     )
 
     job_id: UUID = Field(default_factory=uuid4, primary_key=True)
-    tenant_id: UUID
+    tenant_id: UUID = tenant_id_field()
     doc_id: UUID
     doc_type: str = Field(sa_column=Column(String(128), nullable=False))
     model: str = Field(sa_column=Column(String(128), nullable=False))
@@ -80,7 +80,7 @@ class ExtractedAttribute(BaseExtractionModel, table=True):
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    tenant_id: UUID
+    tenant_id: UUID = tenant_id_field()
     job_id: UUID = Field(foreign_key=f'{APP_SCHEMA}.extraction_jobs.job_id', nullable=False)
     doc_id: UUID
     attribute: str = Field(sa_column=Column(String(128), nullable=False))
