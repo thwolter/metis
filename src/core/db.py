@@ -100,10 +100,17 @@ async def pg_connection(tenant_id: UUID | None) -> AsyncIterator[asyncpg.Connect
         await conn.close()
 
 
-async def dispose_engines() -> None:
-    """Dispose every cached engine and clear per-loop session factories."""
-    engines = list(_engine_cache.values())
-    _engine_cache.clear()
-    _sessionmaker_cache.clear()
-    for engine in engines:
+async def dispose_engines(*, loop: Loop | None = None) -> None:
+    """Dispose the async engine associated with the provided (or current) loop."""
+    if loop is None:
+        try:
+            loop = _current_loop()
+        except RuntimeError:
+            # Nothing to dispose if no event loop is running.
+            return
+
+    engine = _engine_cache.pop(loop, None)
+    _sessionmaker_cache.pop(loop, None)
+
+    if engine is not None:
         await engine.dispose()

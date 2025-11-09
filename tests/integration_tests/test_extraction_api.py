@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from uuid import UUID, uuid4
 
 import pytest
@@ -59,10 +60,28 @@ def stub_map_extractor(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(MapExtractor, 'extract_candidate', _fake_extract)
 
 
+class _CrossLoopEvent:
+    """Thread-safe event with an asyncio-friendly interface."""
+
+    def __init__(self):
+        self._event = threading.Event()
+
+    def set(self) -> None:
+        self._event.set()
+
+    def is_set(self) -> bool:
+        return self._event.is_set()
+
+    async def wait(self) -> bool:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._event.wait)
+        return True
+
+
 @pytest.fixture
 def slow_map_extractor(monkeypatch: pytest.MonkeyPatch):
-    started = asyncio.Event()
-    unblock = asyncio.Event()
+    started = _CrossLoopEvent()
+    unblock = _CrossLoopEvent()
 
     async def _slow_extract(
         self,
@@ -95,7 +114,7 @@ def slow_map_extractor(monkeypatch: pytest.MonkeyPatch):
     return started, unblock
 
 
-async def _poll_job_status(client: AsyncClient, job_id: UUID, *, timeout: float = 10.0) -> dict:
+async def _poll_job_status(client: AsyncClient, job_id: UUID, *, timeout: float = 2) -> dict:
     deadline = asyncio.get_event_loop().time() + timeout
     while True:
         response = await client.get(f'/v1/extraction/jobs/{job_id}')

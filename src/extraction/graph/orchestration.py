@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from core.config import get_settings
-from extraction.registry.registry import get_attribute_specs
+from extraction.registry.registry import UnknownAttributeError, get_attribute_specs
 
 from ..models import ExtractionJob, ExtractionJobStatus
 from ..persistence import create_extraction_job, update_job_status
@@ -157,7 +157,12 @@ async def run_extraction(
         cancel_msg = job.error or 'canceled by user'
         return ExtractionResult.from_job(job, error_msg=cancel_msg)
 
-    attribute_specs = get_attribute_specs(request.doc_type, request.attributes)
+    try:
+        attribute_specs = get_attribute_specs(request.doc_type, request.attributes)
+    except UnknownAttributeError as e:
+        cancel_msg = f'Unknown attribute(s) in request: {e}'
+        return ExtractionResult.from_job(job, error_msg=cancel_msg)
+
     progress = ProgressTracker(total_attributes=len(attribute_specs))
     states = {spec.name: AttributeState(spec.name) for spec in attribute_specs}
 
