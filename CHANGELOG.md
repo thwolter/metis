@@ -1,3 +1,19 @@
+## 0.7.0 (2025-11-10)
+
+### Feat
+
+- **extraction**: refactor WebSocket dependency injection for improved access context handling
+- **extraction**: improve session handling and enhance test scenarios
+- **extraction**: enhance registry bootstrapping, engine disposal, and test coverage
+- **metadata, extraction**: add `document_id` defaults and improve metadata services
+- **metadata**: add tenant_id defaults and improve extraction workflow
+- **docs/classification**: add detailed documentation for classification domain and extend API/tests
+
+### Refactor
+
+- **extraction**: reorganize modules into `tools` and `registry`, streamline engine handling
+- **extraction**: modularize and reorganize extraction logic into phases and context
+
 ## 0.6.0 (2025-11-06)
 
 ### Feat
