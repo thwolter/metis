@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 from extraction.graph.progress import AttributeState, ProgressTracker
@@ -11,6 +11,10 @@ from extraction.schemas import ExtractionStatusPayload, StatusEvent
 
 async def test_status_emitter_triggers_callback_with_correct_payload():
     mock_session = AsyncMock()
+    mock_session.add = Mock()
+    mock_session.flush = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_session.in_transaction = Mock(return_value=True)
     mock_job = ExtractionJob(
         job_id=uuid4(),
         tenant_id=uuid4(),
@@ -40,6 +44,7 @@ async def test_status_emitter_triggers_callback_with_correct_payload():
     payload = await status_emitter.emit(event, include_snapshot=True)
 
     callback.assert_called_once()
+    mock_session.commit.assert_awaited_once()
     assert isinstance(payload, ExtractionStatusPayload)
     assert payload.event == event
     assert payload.job_id == mock_job.job_id

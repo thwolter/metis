@@ -76,6 +76,8 @@ class StatusEmitter:
             )
             if self._callback is not None:
                 await self._callback(self._job.job_id, payload.model_dump(mode='json'))
+            if self._session.in_transaction():
+                await self._session.commit()
             return payload
 
 

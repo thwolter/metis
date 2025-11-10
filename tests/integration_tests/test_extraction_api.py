@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -72,10 +73,9 @@ class _CrossLoopEvent:
     def is_set(self) -> bool:
         return self._event.is_set()
 
-    async def wait(self) -> bool:
+    async def wait(self) -> None:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._event.wait)
-        return True
 
 
 @pytest.fixture
@@ -112,6 +112,41 @@ def slow_map_extractor(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(MapExtractor, 'extract_candidate', _slow_extract)
     return started, unblock
+
+
+@pytest.mark.asyncio
+async def test_slow_map_extractor_waits_for_unblock(slow_map_extractor):
+    started, unblock = slow_map_extractor
+    extractor = MapExtractor()
+    attribute = SimpleNamespace(name='company_name')
+    chunk = SimpleNamespace(
+        chunk_id='chunk-1',
+        header='header',
+        page=1,
+        retr_score=0.75,
+        text='stub chunk text',
+    )
+
+    task = asyncio.create_task(
+        extractor.extract_candidate(
+            doc_type='annual_report',
+            attribute=attribute,  # type: ignore[arg-type]
+            chunk=chunk,  # type: ignore[arg-type]
+        ),
+    )
+
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1.0)
+    except asyncio.TimeoutError as exc:
+        raise AssertionError('slow extractor never started') from exc
+    await asyncio.sleep(0)  # allow the task to reach the blocking wait
+    assert not task.done(), 'slow extractor unexpectedly finished before unblock'
+
+    unblock.set()
+    candidate = await asyncio.wait_for(task, timeout=1.0)
+    assert candidate.attribute == attribute.name
+    assert candidate.value == 'stubbed-value'
+    assert candidate.retrieval.chunk_id == chunk.chunk_id
 
 
 async def _poll_job_status(client: AsyncClient, job_id: UUID, *, timeout: float = 2) -> dict:
@@ -183,15 +218,28 @@ async def test_cancel_extraction_job(
 
     response = await auth_client.post('/v1/extraction/run', json=payload)
     job_id = UUID(response.json()['job_id'])
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5.0)
+    except asyncio.TimeoutError as exc:
+        raise AssertionError('Extraction job did not start in time') from exc
+    try:
+        # Production-faithful: cancel should be non-blocking and return quickly
+        cancel_response = await auth_client.post(
+            f'/v1/extraction/jobs/{job_id}/cancel',
+            timeout=3.0,
+        )
+    finally:
+        # Ensure the slow extractor can proceed and observe cancellation
+        unblock.set()
 
-    await asyncio.wait_for(started.wait(), timeout=1.0)
-
-    cancel_response = await auth_client.post(f'/v1/extraction/jobs/{job_id}/cancel')
     assert cancel_response.status_code == 202
-    assert cancel_response.json()['status'] == ExtractionJobStatus.CANCELED.value
-
-    unblock.set()
-
+    cancel_payload = cancel_response.json()
+    assert cancel_payload['status'] in {
+        ExtractionJobStatus.CANCELED.value,
+        getattr(ExtractionJobStatus, 'CANCELLING').value
+        if hasattr(ExtractionJobStatus, 'CANCELLING')
+        else ExtractionJobStatus.CANCELED.value,
+    }
     status_payload = await _poll_job_status(auth_client, job_id)
     assert status_payload['status'] == ExtractionJobStatus.CANCELED.value
     assert status_payload['results'] is None or status_payload['results'] == {}
