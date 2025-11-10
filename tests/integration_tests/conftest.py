@@ -10,6 +10,7 @@ import httpx
 import pytest
 from dramatiq.brokers.stub import StubBroker
 from dramatiq.worker import Worker
+from fastapi import WebSocket
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from sqlalchemy.engine import make_url
@@ -189,7 +190,7 @@ def override_auth_dependencies():
     app.dependency_overrides[require_auth] = _fake_get_current_auth
     app.dependency_overrides[require_access_context] = _fake_get_access_context
 
-    async def _fake_websocket_access_context(*_: object, **__: object) -> AccessContext:
+    async def _fake_websocket_access_context(_: WebSocket) -> AccessContext:
         return AccessContext(tenant_id=tenant_id, user_id=user_id)
 
     app.dependency_overrides[websocket_access_context] = _fake_websocket_access_context

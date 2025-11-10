@@ -278,8 +278,11 @@ async def cancel_extraction_job(
 
 
 @stream_router.websocket('/jobs/{job_id}/stream', name='stream_job_status')
-async def stream_job_status(websocket: WebSocket, job_id: UUID):
-    access = await websocket_access_context(websocket)
+async def stream_job_status(
+    websocket: WebSocket,
+    job_id: UUID,
+    access: AccessContext = Depends(websocket_access_context),
+):
     async with access_scoped_session_ctx(
         session_factory=session_factory,
         access_context=access,
