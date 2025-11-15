@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from .schemas import ExtractionRequest, RetrievalConfig
+from datasifter import ExtractionRequest, JobState, JobStatus, RetrievalConfig
+
+from .models import ExtractionJob
 
 
 def resolve_execution_config(
@@ -18,3 +20,32 @@ def resolve_execution_config(
             hints_weight=0.3,
         )
     return request.retriever
+
+
+def job_state_from_model(model: ExtractionJob, *, base: JobState | None = None) -> JobState:
+    payload = {
+        'job_id': model.job_id,
+        'doc_id': model.doc_id,
+        'doc_type': model.doc_type,
+        'model': model.model,
+        'model_version': model.model_version,
+        'status': JobStatus(getattr(model.status, 'value', model.status)),
+        'tenant_id': model.tenant_id,
+        'document_digest': model.document_digest,
+        'collection_name': model.collection_name,
+        'started_at': model.started_at,
+        'finished_at': model.finished_at,
+        'error': model.error,
+        'retriever_config': model.retriever_config,
+        'options': model.options,
+        'seq': model.seq,
+    }
+    if base is None:
+        state = JobState(**payload)
+    else:
+        for key, value in payload.items():
+            setattr(base, key, value)
+        state = base
+    state.context.setdefault('orm', model)
+    state.context['orm'] = model
+    return state

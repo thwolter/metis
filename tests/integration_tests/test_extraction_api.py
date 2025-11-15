@@ -6,12 +6,12 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from datasifter.schemas import Candidate, RetrievalMetadata
 from httpx import AsyncClient
 from sqlmodel import select
 
+from extraction.adapters.map_engine import MapEngine
 from extraction.models import ExtractedAttribute, ExtractionJobStatus
-from extraction.schemas import Candidate, RetrievalMetadata
-from extraction.tools.map_step import MapExtractor
 from tests.utils import load_fixtures  # type: ignore[import]
 
 pytestmark = pytest.mark.integration
@@ -58,7 +58,7 @@ def stub_map_extractor(monkeypatch: pytest.MonkeyPatch):
             raw_json={'value': value, 'confidence': 0.92},
         )
 
-    monkeypatch.setattr(MapExtractor, 'extract_candidate', _fake_extract)
+    monkeypatch.setattr(MapEngine, 'extract_candidate', _fake_extract)
 
 
 class _CrossLoopEvent:
@@ -110,14 +110,14 @@ def slow_map_extractor(monkeypatch: pytest.MonkeyPatch):
             raw_json={'value': 'stubbed-value'},
         )
 
-    monkeypatch.setattr(MapExtractor, 'extract_candidate', _slow_extract)
+    monkeypatch.setattr(MapEngine, 'extract_candidate', _slow_extract)
     return started, unblock
 
 
 @pytest.mark.asyncio
 async def test_slow_map_extractor_waits_for_unblock(slow_map_extractor):
     started, unblock = slow_map_extractor
-    extractor = MapExtractor()
+    extractor = MapEngine(model_name='test-model', llm=SimpleNamespace(ainvoke=lambda *_args, **_kwargs: None))
     attribute = SimpleNamespace(name='company_name')
     chunk = SimpleNamespace(
         chunk_id='chunk-1',
@@ -132,6 +132,7 @@ async def test_slow_map_extractor_waits_for_unblock(slow_map_extractor):
             doc_type='annual_report',
             attribute=attribute,  # type: ignore[arg-type]
             chunk=chunk,  # type: ignore[arg-type]
+            attempt=1,
         ),
     )
 

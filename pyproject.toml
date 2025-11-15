@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16.5",
     "fastapi>=0.118.1",
+    "datasifter",
     "langchain>=0.3.27",
     "langchain-core>=0.3.78",
     "langchain-openai>=0.3.35",
@@ -32,6 +33,10 @@ dependencies = [
     "websockets>=15.0.1",
     "langchain-postgres>=0.0.16",
 ]
+
+[tool.uv.sources]
+datasifter = { path = "../datasifter", editable = true }
+
 [dependency-groups]
 dev = [
     "anyio>=4.7.0",

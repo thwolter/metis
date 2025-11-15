@@ -1,34 +1,25 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
-from langchain.chat_models import init_chat_model
-from langchain_core.language_models.chat_models import BaseChatModel
-
-from core.config import get_settings
-from extraction.prompts import map_prompt_messages
-from extraction.schemas import (
+from datasifter.interfaces import MapEngine as MapEngineInterface
+from datasifter.prompts import map_prompt_messages
+from datasifter.schemas import (
     AttributeSpec,
     Candidate,
     RetrievalMetadata,
     RetrievedChunk,
 )
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models.chat_models import BaseChatModel
 
 
-class MapExtractor:
-    """Per-chunk LLM map step producing candidate values."""
-
-    def __init__(self, model: str | None = None, llm: BaseChatModel | None = None):
-        settings = get_settings()
-        default_model = settings.extraction.default_model
-        self._model_name = model or default_model
-        self._llm = llm or init_chat_model(model=self._model_name, temperature=0)
-
-    @property
-    def model_name(self) -> str:
-        return self._model_name
+class MapEngine(MapEngineInterface):
+    def __init__(self, *, model_name: str, llm: BaseChatModel | None = None):
+        self._model_name = model_name
+        self._llm = llm or init_chat_model(model=model_name, temperature=0)
 
     @staticmethod
     def _parse_json(content: str | None) -> dict[str, Any] | None:
@@ -53,7 +44,7 @@ class MapExtractor:
         doc_type: str,
         attribute: AttributeSpec,
         chunk: RetrievedChunk,
-        attempt: int = 1,
+        attempt: int,
         prompt_id: str | None = None,
     ) -> Candidate:
         prompt_tag = prompt_id or f'p-{uuid4().hex[:8]}'
@@ -114,3 +105,10 @@ class MapExtractor:
             retrieval=retrieval,
             raw_json=payload,
         )
+
+
+def build_map_engine_factory() -> Callable[[str], MapEngine]:
+    def _factory(model_name: str) -> MapEngine:
+        return MapEngine(model_name=model_name)
+
+    return _factory

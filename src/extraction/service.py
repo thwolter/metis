@@ -3,15 +3,14 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from datasifter.schemas import AttributeResult, AttributeSpec
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from extraction.registry.registry import AttributeSpec
 from metadata.service import ensure_document
 from utils import utc_now
 
 from .models import ExtractedAttribute, ExtractionJob, ExtractionJobStatus
-from .schemas import AttributeResult
 
 
 async def create_extraction_job(

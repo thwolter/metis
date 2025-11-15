@@ -6,16 +6,15 @@ from typing import Any
 from uuid import UUID
 
 import dramatiq
+from datasifter.schemas import ExtractionRequest
 from dramatiq.brokers.stub import StubBroker
 from tenauth.schemas import AccessContext
 
 from core.broker import broker as dramatiq_broker
 from core.db import scoped_session
 
-from .events import broker as event_broker
-from .graph import run_extraction
 from .models import ExtractionJob, ExtractionJobStatus
-from .schemas import ExtractionRequest
+from .runner import run_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +41,10 @@ async def _execute_job(job_id: UUID, request_payload: dict[str, Any], access_pay
         if update_data:
             req = req.model_copy(update=update_data)
 
-        async def _emit_callback(jid: UUID, payload: dict[str, Any]) -> None:
-            await event_broker.publish(jid, payload)
-
         try:
             await run_extraction(
                 session,
                 req,
-                emit=_emit_callback,
                 job=job,
             )
         except Exception:

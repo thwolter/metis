@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import pytest
-
-from extraction.registry.registry import (
+from datasifter.registry.registry import (
     _REGISTRY,
     UnknownAttributeError,
     UnknownDocumentTypeError,
     get_attribute_specs,
     register,
 )
-from extraction.schemas import AttributeSpec, AttributeType
+from datasifter.schemas import AttributeSpec, AttributeType
 
 
 def test_get_attribute_specs_returns_all_for_doc_type() -> None:

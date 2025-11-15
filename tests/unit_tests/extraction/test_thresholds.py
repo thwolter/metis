@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from extraction.schemas import AttributeResult, Candidate, RetrievalMetadata, Thresholds
-from extraction.thresholds import abstain_output, passes_thresholds
+from datasifter.schemas import AttributeResult, Candidate, RetrievalMetadata, Thresholds
+from datasifter.thresholds import abstain_output, passes_thresholds
 
 
 def make_result(confidence: float | None) -> AttributeResult:

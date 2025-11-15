@@ -4,6 +4,12 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from datasifter.schemas import (
+    ExtractionRequest,
+    ExtractionResult,
+    ExtractionStatusPayload,
+    StatusEvent,
+)
 from fastapi import (
     APIRouter,
     Depends,
@@ -29,16 +35,10 @@ from core.deps import SessionDep
 
 from .events import broker
 from .models import ExtractedAttribute, ExtractionJob, ExtractionJobStatus
-from .persistence import (
+from .service import (
     create_extraction_job,
     increment_sequence,
     update_job_status,
-)
-from .schemas import (
-    ExtractionRequest,
-    ExtractionResult,
-    ExtractionStatusPayload,
-    StatusEvent,
 )
 from .tasks import queue_extraction_job
 from .utils import resolve_execution_config

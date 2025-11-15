@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Any, Literal
 
+from datasifter import RetrievalConfig
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import SettingsConfigDict
 
@@ -21,6 +22,19 @@ class ExtractionSettings(ValidatedModel):
     max_chunks: int = 6
     top_m: int = 3
     header_boost: float = 0.5
+    semantic_weight: float = 1.0
+    bm25_weight: float = 0.5
+    hints_weight: float = 0.3
+
+    def to_retrieval_config(self) -> RetrievalConfig:
+        return RetrievalConfig(
+            max_chunks=self.max_chunks,
+            top_m=self.top_m,
+            header_boost=self.header_boost,
+            semantic_weight=self.semantic_weight,
+            bm25_weight=self.bm25_weight,
+            hints_weight=self.hints_weight,
+        )
 
 
 class Settings(ValidatedSettings):

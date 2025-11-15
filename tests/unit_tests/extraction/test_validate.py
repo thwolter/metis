@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from extraction.schemas import AttributeConstraints, AttributeSpec, AttributeType
-from extraction.tools.validate import _validate_and_normalise
+from datasifter.schemas import AttributeConstraints, AttributeSpec, AttributeType
+from datasifter.tools.validate import _validate_and_normalise
 
 
 def test_validate_and_normalise_date_iso() -> None:
