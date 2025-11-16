@@ -16,12 +16,11 @@ from core import get_settings
 
 from .adapters import (
     AttributeStore,
-    BrokerProgressSink,
     JobRepository,
     RetrievalProvider,
 )
 from .adapters.map_engine import build_map_engine_factory
-from .events import ExtractionEventBroker
+from .events import BrokerProgressSink, ExtractionEventBroker
 from .events import broker as default_broker
 from .models import ExtractionJob
 from .utils import job_state_from_model

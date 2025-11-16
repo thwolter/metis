@@ -5,6 +5,9 @@ from collections import defaultdict
 from typing import Any, AsyncIterator
 from uuid import UUID
 
+from datasifter import ExtractionStatusPayload
+from datasifter.interfaces import ProgressSink
+
 
 class ExtractionEventBroker:
     """In-memory pub-sub for extraction job status events."""
@@ -42,4 +45,9 @@ class ExtractionEventBroker:
                     self._subscribers.pop(job_id, None)
 
 
-broker = ExtractionEventBroker()
+class BrokerProgressSink(ProgressSink):
+    def __init__(self, broker: ExtractionEventBroker | None = None):
+        self._broker = broker or ExtractionEventBroker()
+
+    async def publish(self, payload: ExtractionStatusPayload) -> None:
+        await self._broker.publish(payload.job_id, payload.model_dump(mode='json'))

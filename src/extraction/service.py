@@ -46,6 +46,7 @@ async def create_extraction_job(
 
 async def update_job_status(
     session: AsyncSession,
+    *,
     job: ExtractionJob,
     status: ExtractionJobStatus,
     error: str | None = None,
